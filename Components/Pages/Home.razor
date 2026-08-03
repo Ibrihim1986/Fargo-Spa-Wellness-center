@@ -1,6 +1,78 @@
 @page "/"
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
 
 <PageTitle>Home - Fargo Spa and Wellness</PageTitle>
 
-<h1>Fargo Spa and Wellness</h1>
-<p>Relax, restore, and rejuvenate. Welcome to Fargo Spa and Wellness.</p>
+<div class="bg-sand rounded-3 p-4 p-md-5 mb-4">
+    <h1>Fargo Spa and Wellness</h1>
+    <p class="fs-5">Relax, restore, and rejuvenate. Welcome to Fargo Spa and Wellness.</p>
+    <a class="btn btn-primary btn-lg" href="book">Book Now</a>
+</div>
+
+<h2>Featured Services</h2>
+@if (featuredServices is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row g-3 mb-5">
+        @foreach (var service in featuredServices)
+        {
+            <div class="col-12 col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <span class="badge-featured mb-2 d-inline-block">Featured</span>
+                        <h5>@service.Name</h5>
+                        <p>@service.Description</p>
+                        <p class="fw-bold text-teal mb-0">
+                            @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<h2>What Our Clients Say</h2>
+@if (testimonials is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var testimonial in testimonials)
+        {
+            <div class="col-12 col-md-6 col-lg-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <p class="text-teal mb-1">@(new string('★', testimonial.Rating))@(new string('☆', 5 - testimonial.Rating))</p>
+                        <p class="mb-0">"@testimonial.ReviewText"</p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private List<Service>? featuredServices;
+    private List<Testimonial>? testimonials;
+
+    protected override async Task OnInitializedAsync()
+    {
+        featuredServices = await Db.Services
+            .Where(s => s.IsActive && s.Description.Contains("Featured"))
+            .ToListAsync();
+
+        testimonials = await Db.Testimonials
+            .Where(t => t.ApprovalStatus == "Approved")
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+    }
+}

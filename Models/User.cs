@@ -10,5 +10,7 @@ public class User
     public string Phone { get; set; } = "";
     public string Role { get; set; } = ""; // "Client", "Provider", or "Admin"
     public DateTime CreatedAt { get; set; }
+    public string? Title { get; set; } // Provider job title, e.g. "Massage Therapist"
+    public string? Bio { get; set; } // Provider bio/specialties
     public string FullName => $"{FirstName} {LastName}";
 }

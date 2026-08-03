@@ -1,0 +1,14 @@
+@page "/admin/service-notes"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin")]
+
+<PageTitle>Service Notes - Admin</PageTitle>
+
+<h1>Service Notes</h1>
+<p>Coming soon: staff notes on client service history and preferences.</p>
+
+<p>
+    <span class="badge-featured">Guardian Consent Required</span>
+    <span class="text-muted ms-2">Example badge for flagging child clients requiring guardian consent.</span>
+</p>
+@((MarkupString)"<!-- US-603: Flag child clients requiring guardian consent -->")

@@ -1,19 +1,108 @@
+:root {
+    --spa-bg: #FFFDF9;
+    --spa-sand: #F5EFE6;
+    --spa-sand-dark: #EAE1D1;
+    --spa-sage: #7C9885;
+    --spa-sage-tint: #E4EAE1;
+    --spa-teal: #2E7D6B;
+    --spa-teal-dark: #235F51;
+    --spa-charcoal: #2C2C2C;
+}
+
 html, body {
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    background-color: var(--spa-bg);
+    color: var(--spa-charcoal);
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--spa-charcoal);
+}
+
+h1 {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+}
+
+h2 {
+    font-size: 1.85rem;
 }
 
 a, .btn-link {
-    color: #006bb7;
+    color: var(--spa-teal);
+}
+
+a:hover, .btn-link:hover {
+    color: var(--spa-teal-dark);
+}
+
+.btn {
+    border-radius: 0.5rem;
 }
 
 .btn-primary {
     color: #fff;
-    background-color: #1b6ec2;
-    border-color: #1861ac;
+    background-color: var(--spa-teal);
+    border-color: var(--spa-teal);
+}
+
+.btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+    background-color: var(--spa-teal-dark) !important;
+    border-color: var(--spa-teal-dark) !important;
+}
+
+.btn-outline-primary {
+    color: var(--spa-teal);
+    border-color: var(--spa-teal);
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--spa-teal);
+    border-color: var(--spa-teal);
 }
 
 .btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
+  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem var(--spa-sage);
+}
+
+.card {
+    background-color: #fff;
+    border: 1px solid var(--spa-sand-dark);
+    border-radius: 0.75rem;
+    box-shadow: 0 2px 14px rgba(44, 44, 44, 0.07);
+}
+
+.card-body {
+    padding: 1.5rem;
+}
+
+.bg-sand {
+    background-color: var(--spa-sand);
+}
+
+.bg-sage-tint {
+    background-color: var(--spa-sage-tint);
+}
+
+.text-teal {
+    color: var(--spa-teal);
+}
+
+.text-sage {
+    color: var(--spa-sage);
+}
+
+.badge-featured {
+    display: inline-block;
+    background-color: var(--spa-teal);
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.2rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
 .content {
@@ -25,15 +114,15 @@ h1:focus {
 }
 
 .valid.modified:not([type=checkbox]) {
-    outline: 1px solid #26b050;
+    outline: 1px solid var(--spa-sage);
 }
 
 .invalid {
-    outline: 1px solid #e50000;
+    outline: 1px solid #b3261e;
 }
 
 .validation-message {
-    color: #e50000;
+    color: #b3261e;
 }
 
 .blazor-error-boundary {
