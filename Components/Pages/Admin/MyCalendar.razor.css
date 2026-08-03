@@ -1,0 +1,51 @@
+.booking-time {
+    min-width: 8rem;
+}
+
+.status-badge {
+    display: inline-block;
+    background-color: rgba(124, 152, 133, 0.2);
+    color: #2E7D6B;
+    border-radius: 999px;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.slot-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 5rem;
+    border-radius: 0.75rem;
+    padding: 0.6rem 0.5rem;
+    border: 1px solid #EAE1D1;
+    font-weight: 600;
+}
+
+.slot-available {
+    background-color: #fff;
+    color: #2C2C2C;
+}
+
+.slot-available:hover {
+    background-color: rgba(124, 152, 133, 0.15);
+}
+
+.slot-unavailable {
+    background-color: #F0EAE0;
+    color: #7C9885;
+    text-decoration: line-through;
+}
+
+.slot-booked {
+    background-color: rgba(46, 125, 107, 0.15);
+    color: #2E7D6B;
+    opacity: 0.8;
+}
+
+.slot-state {
+    font-size: 0.65rem;
+    font-weight: 500;
+    margin-top: 0.2rem;
+}

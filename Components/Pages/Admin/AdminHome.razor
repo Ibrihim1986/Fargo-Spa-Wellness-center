@@ -1,8 +1,235 @@
 @page "/admin"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
 @attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
 
 <PageTitle>Admin - Fargo Spa and Wellness</PageTitle>
 
 <h1>Admin Dashboard</h1>
-<p>Manage services, appointments, and testimonials from here.</p>
+<p class="text-sage">Manage services, staff, promotions, and view business insights.</p>
+
+<ul class="nav admin-tabs mb-4">
+    <li class="nav-item">
+        <button class="admin-tab @(activeTab == "overview" ? "active" : "")" @onclick='() => activeTab = "overview"'>Overview</button>
+    </li>
+    <li class="nav-item">
+        <button class="admin-tab @(activeTab == "services" ? "active" : "")" @onclick='() => activeTab = "services"'>Services</button>
+    </li>
+    <li class="nav-item">
+        <button class="admin-tab @(activeTab == "staff" ? "active" : "")" @onclick='() => activeTab = "staff"'>Staff</button>
+    </li>
+    <li class="nav-item">
+        <button class="admin-tab @(activeTab == "promotions" ? "active" : "")" @onclick='() => activeTab = "promotions"'>Promotions</button>
+    </li>
+</ul>
+
+@if (activeTab == "overview")
+{
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="stat-icon">📅</div>
+                    <div class="stat-value">@todaysBookings</div>
+                    <div class="stat-label">Today's Bookings</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="stat-icon">💵</div>
+                    <div class="stat-value">@estimatedRevenue.ToString("C0")</div>
+                    <div class="stat-label">Revenue (est.)</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="stat-icon">👥</div>
+                    <div class="stat-value">@totalClients</div>
+                    <div class="stat-label">Total Clients</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <div class="stat-icon">⭐</div>
+                    <div class="stat-value stat-value-sm">@topService</div>
+                    <div class="stat-label">Top Service</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5>Bookings by Week</h5>
+                    <div class="bar-chart">
+                        @foreach (var week in bookingsByWeek)
+                        {
+                            <div class="bar-col">
+                                <div class="bar" style="height:@(week.Count == 0 ? 2 : week.Count * 100 / maxWeekCount)%"></div>
+                                <div class="bar-label">@week.Label</div>
+                                <div class="bar-value">@week.Count</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-6">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5>Revenue by Service Category</h5>
+                    <div class="d-flex align-items-center gap-4 flex-wrap">
+                        <div class="pie-chart" style="background:@pieGradient"></div>
+                        <ul class="pie-legend">
+                            @foreach (var slice in revenueByCategory)
+                            {
+                                <li>
+                                    <span class="legend-swatch" style="background-color:@slice.Color"></span>
+                                    @slice.Category — @slice.Amount.ToString("C0")
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else if (activeTab == "services")
+{
+    <div class="row g-3">
+        @foreach (var service in services)
+        {
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6>@service.Name</h6>
+                        <p class="text-sage mb-1">@service.Category — @service.DurationMinutes min</p>
+                        <p class="fw-bold text-teal mb-0">
+                            @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
+                        </p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (activeTab == "staff")
+{
+    <div class="row g-3">
+        @foreach (var provider in staff)
+        {
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6>@provider.FullName</h6>
+                        <p class="text-sage mb-1">@provider.Title</p>
+                        <p class="mb-0 small">@provider.Bio</p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+else if (activeTab == "promotions")
+{
+    <p>Coming soon: create and manage promotional offers.</p>
+}
+
+@code {
+    private string activeTab = "overview";
+
+    private int todaysBookings;
+    private decimal estimatedRevenue;
+    private int totalClients;
+    private string topService = "—";
+
+    private List<WeekBucket> bookingsByWeek = [];
+    private int maxWeekCount = 1;
+
+    private List<CategorySlice> revenueByCategory = [];
+    private string pieGradient = "";
+
+    private List<Service> services = [];
+    private List<User> staff = [];
+
+    private static readonly string[] ChartPalette = ["#2E7D6B", "#7C9885", "#C9AE80", "#4a6b60", "#a3b8a9", "#8a765a"];
+
+    protected override async Task OnInitializedAsync()
+    {
+        services = await Db.Services.Where(s => s.IsActive).ToListAsync();
+        staff = await Db.Users.Where(u => u.Role == "Provider").ToListAsync();
+
+        var appointments = await Db.Appointments.ToListAsync();
+        var serviceById = services.ToDictionary(s => s.Id);
+        var allServices = await Db.Services.ToDictionaryAsync(s => s.Id);
+
+        todaysBookings = appointments.Count(a => a.StartTime.Date == DateTime.Today);
+        totalClients = await Db.Users.CountAsync(u => u.Role == "Client");
+
+        estimatedRevenue = appointments
+            .Where(a => a.Status == "Completed" && allServices.TryGetValue(a.ServiceId, out _))
+            .Sum(a => allServices[a.ServiceId].Price);
+
+        topService = appointments
+            .Where(a => allServices.ContainsKey(a.ServiceId))
+            .GroupBy(a => allServices[a.ServiceId].Name)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault() ?? "—";
+
+        bookingsByWeek = appointments
+            .GroupBy(a => System.Globalization.ISOWeek.GetWeekOfYear(a.StartTime))
+            .OrderBy(g => g.Key)
+            .Select(g => new WeekBucket($"Wk {g.Key}", g.Count()))
+            .ToList();
+        maxWeekCount = bookingsByWeek.Count > 0 ? Math.Max(1, bookingsByWeek.Max(w => w.Count)) : 1;
+
+        var revenueGroups = appointments
+            .Where(a => a.Status == "Completed" && allServices.ContainsKey(a.ServiceId))
+            .GroupBy(a => allServices[a.ServiceId].Category)
+            .Select(g => new { Category = g.Key, Amount = g.Sum(a => allServices[a.ServiceId].Price) })
+            .Where(g => g.Amount > 0)
+            .OrderByDescending(g => g.Amount)
+            .ToList();
+
+        var totalRevenue = revenueGroups.Sum(g => g.Amount);
+        revenueByCategory = [];
+        var cumulative = 0m;
+        var gradientStops = new List<string>();
+
+        for (var i = 0; i < revenueGroups.Count; i++)
+        {
+            var group = revenueGroups[i];
+            var color = ChartPalette[i % ChartPalette.Length];
+            revenueByCategory.Add(new CategorySlice(group.Category, group.Amount, color));
+
+            if (totalRevenue > 0)
+            {
+                var startPct = cumulative / totalRevenue * 100;
+                cumulative += group.Amount;
+                var endPct = cumulative / totalRevenue * 100;
+                gradientStops.Add($"{color} {startPct:0.##}% {endPct:0.##}%");
+            }
+        }
+
+        pieGradient = gradientStops.Count > 0
+            ? $"conic-gradient({string.Join(", ", gradientStops)})"
+            : "#F5EFE6";
+    }
+
+    private record WeekBucket(string Label, int Count);
+    private record CategorySlice(string Category, decimal Amount, string Color);
+}

@@ -241,6 +241,8 @@ public static class SeedData
         var priya = users["priya.patel@fargospa.com"];
         var hannah = users["hannah.bergstrom@fargospa.com"];
 
+        var narrativeToday = new DateTime(2026, 8, 3);
+
         var bookings = new (User Client, Service Service, User Provider, DateTime Start)[]
         {
             (sarah, services["60-Min Therapeutic Massage"], amara, new DateTime(2026, 7, 4, 10, 0, 0)),
@@ -265,7 +267,31 @@ public static class SeedData
             StartTime = b.Start,
             EndTime = b.Start.AddMinutes(b.Service.DurationMinutes),
             CreatedAt = b.Start.AddDays(-3),
-        });
+            Status = b.Start < narrativeToday ? "Completed" : "Upcoming",
+        }).ToList();
+
+        // A handful of bookings dated on the actual current day, with varied
+        // statuses, so the Admin dashboard / Front Desk demo meaningfully
+        // regardless of what day the app happens to be run on.
+        var today = DateTime.Today;
+        var todaysBookings = new (User Client, Service Service, User Provider, DateTime Start, string Status)[]
+        {
+            (sarah, services["Dermaplaning"], sofia, today.AddHours(9), "Completed"),
+            (james, services["Deep Tissue Massage"], amara, today.AddHours(11), "CheckedIn"),
+            (maria, services["Customized Facial"], sofia, today.AddHours(13), "NoShow"),
+            (sarah, services["Hot Yoga Class"], priya, today.AddHours(15), "Upcoming"),
+        };
+
+        appointments.AddRange(todaysBookings.Select(b => new Appointment
+        {
+            ClientId = b.Client.Id,
+            ServiceId = b.Service.Id,
+            ProviderId = b.Provider.Id,
+            StartTime = b.Start,
+            EndTime = b.Start.AddMinutes(b.Service.DurationMinutes),
+            CreatedAt = today.AddDays(-2),
+            Status = b.Status,
+        }));
 
         db.Appointments.AddRange(appointments);
         await db.SaveChangesAsync();
@@ -279,12 +305,14 @@ public static class SeedData
         }
 
         var users = await db.Users.ToDictionaryAsync(u => u.Email);
+        var services = await db.Services.ToDictionaryAsync(s => s.Name);
 
         var testimonials = new[]
         {
             new Testimonial
             {
                 ClientId = users["jessica.turner@example.com"].Id,
+                ServiceId = services["60-Min Therapeutic Massage"].Id,
                 Rating = 5,
                 ReviewText = "The 60-Min Therapeutic Massage was incredible — best massage I've ever had!",
                 ApprovalStatus = "Approved",
@@ -293,6 +321,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["michael.ramirez@example.com"].Id,
+                ServiceId = services["Salt Cave Massage"].Id,
                 Rating = 5,
                 ReviewText = "The Salt Cave Massage is unlike anything else in town. Deeply relaxing.",
                 ApprovalStatus = "Approved",
@@ -301,6 +330,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["ashley.brooks@example.com"].Id,
+                ServiceId = services["Customized Facial"].Id,
                 Rating = 5,
                 ReviewText = "My Customized Facial left my skin glowing for days. Sofia is amazing.",
                 ApprovalStatus = "Approved",
@@ -309,6 +339,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["david.kim@example.com"].Id,
+                ServiceId = services["Botox Cosmetic"].Id,
                 Rating = 4,
                 ReviewText = "Botox Cosmetic results were subtle and natural-looking. Great experience with Dr. Lee.",
                 ApprovalStatus = "Approved",
@@ -317,6 +348,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["emily.sanders@example.com"].Id,
+                ServiceId = services["Day of Bliss Package"].Id,
                 Rating = 5,
                 ReviewText = "The Day of Bliss Package was the perfect birthday treat — five hours of pure relaxation.",
                 ApprovalStatus = "Approved",
@@ -325,6 +357,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["tyler.walsh@example.com"].Id,
+                ServiceId = services["Hot Yoga Class"].Id,
                 Rating = 5,
                 ReviewText = "Hot Yoga Class with Priya is intense but so rewarding. My flexibility has improved a ton.",
                 ApprovalStatus = "Approved",
@@ -333,6 +366,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["lauren.hayes@example.com"].Id,
+                ServiceId = services["Dermaplaning"].Id,
                 Rating = 4,
                 ReviewText = "Dermaplaning made my skin so smooth. My makeup goes on flawlessly now.",
                 ApprovalStatus = "Approved",
@@ -341,6 +375,7 @@ public static class SeedData
             new Testimonial
             {
                 ClientId = users["kevin.moore@example.com"].Id,
+                ServiceId = services["Float Tank Session"].Id,
                 Rating = 5,
                 ReviewText = "The Float Tank Session was the most relaxed I've felt in years. Highly recommend.",
                 ApprovalStatus = "Approved",

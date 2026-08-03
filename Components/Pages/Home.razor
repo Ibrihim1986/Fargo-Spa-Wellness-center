@@ -6,73 +6,61 @@
 
 <PageTitle>Home - Fargo Spa and Wellness</PageTitle>
 
-<div class="bg-sand rounded-3 p-4 p-md-5 mb-4">
-    <h1>Fargo Spa and Wellness</h1>
-    <p class="fs-5">Relax, restore, and rejuvenate. Welcome to Fargo Spa and Wellness.</p>
-    <a class="btn btn-primary btn-lg" href="book">Book Now</a>
-</div>
+<section class="hero-section">
+    <div class="container-fluid px-3 px-lg-5 py-5">
+        <div class="text-center mx-auto hero-inner">
+            <span class="hero-badge">Now accepting new clients</span>
+            <h1 class="hero-headline">Your sanctuary for <span class="text-teal">wellness</span> &amp; rejuvenation</h1>
+            <p class="hero-subtext">
+                From therapeutic massage to advanced medical aesthetics, Fargo Spa and Wellness Center offers a
+                full range of treatments designed to restore balance to body and mind.
+            </p>
+            <div class="d-flex flex-column flex-sm-row justify-content-center gap-3 mt-4">
+                <a href="book" class="btn btn-primary btn-lg rounded-pill px-4">Book Your Visit →</a>
+                <a href="services" class="btn btn-outline-primary btn-lg rounded-pill px-4">Explore Services</a>
+            </div>
+        </div>
+    </div>
+</section>
 
-<h2>Featured Services</h2>
-@if (featuredServices is null)
-{
-    <p>Loading...</p>
-}
-else
-{
-    <div class="row g-3 mb-5">
-        @foreach (var service in featuredServices)
+<section class="py-5">
+    <div class="container-fluid px-3 px-lg-5">
+        <p class="section-label text-center">Signature Treatments</p>
+
+        @if (featuredServices is null)
         {
-            <div class="col-12 col-md-4">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <span class="badge-featured mb-2 d-inline-block">Featured</span>
-                        <h5>@service.Name</h5>
-                        <p>@service.Description</p>
-                        <p class="fw-bold text-teal mb-0">
-                            @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
-                        </p>
+            <p class="text-center">Loading...</p>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var service in featuredServices)
+                {
+                    <div class="col-12 col-md-4">
+                        <div class="card h-100">
+                            <div class="card-body">
+                                <span class="badge-featured mb-2 d-inline-block">Featured</span>
+                                <h5>@service.Name</h5>
+                                <p>@service.Description</p>
+                                <p class="fw-bold text-teal mb-0">
+                                    @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                </div>
+                }
             </div>
         }
     </div>
-}
-
-<h2>What Our Clients Say</h2>
-@if (testimonials is null)
-{
-    <p>Loading...</p>
-}
-else
-{
-    <div class="row g-3">
-        @foreach (var testimonial in testimonials)
-        {
-            <div class="col-12 col-md-6 col-lg-3">
-                <div class="card h-100">
-                    <div class="card-body">
-                        <p class="text-teal mb-1">@(new string('★', testimonial.Rating))@(new string('☆', 5 - testimonial.Rating))</p>
-                        <p class="mb-0">"@testimonial.ReviewText"</p>
-                    </div>
-                </div>
-            </div>
-        }
-    </div>
-}
+</section>
 
 @code {
     private List<Service>? featuredServices;
-    private List<Testimonial>? testimonials;
 
     protected override async Task OnInitializedAsync()
     {
         featuredServices = await Db.Services
             .Where(s => s.IsActive && s.Description.Contains("Featured"))
-            .ToListAsync();
-
-        testimonials = await Db.Testimonials
-            .Where(t => t.ApprovalStatus == "Approved")
-            .OrderByDescending(t => t.CreatedAt)
             .ToListAsync();
     }
 }

@@ -1,0 +1,123 @@
+@page "/testimonials"
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<PageTitle>Testimonials - Fargo Spa and Wellness</PageTitle>
+
+<div class="container-fluid px-3 px-lg-5 py-5">
+    <div class="text-center mb-4">
+        <h1>What Our Clients Say</h1>
+        @if (allReviews is not null && allReviews.Count > 0)
+        {
+            <span class="rating-badge">
+                @Stars(5) &nbsp;@averageRating.ToString("0.0")&nbsp;from @allReviews.Count reviews
+            </span>
+        }
+    </div>
+
+    <div class="d-flex flex-column flex-sm-row justify-content-center gap-3 mb-4">
+        <select class="form-select w-auto" @bind="selectedCategory">
+            <option value="">All Categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+        <select class="form-select w-auto" @bind="selectedRating">
+            <option value="0">All Ratings</option>
+            <option value="5">5 Stars</option>
+            <option value="4">4 Stars</option>
+            <option value="3">3 Stars</option>
+            <option value="2">2 Stars</option>
+            <option value="1">1 Star</option>
+        </select>
+    </div>
+
+    @if (allReviews is null)
+    {
+        <p class="text-center">Loading...</p>
+    }
+    else
+    {
+        <div class="row g-3">
+            @foreach (var review in FilteredReviews)
+            {
+                <div class="col-12 col-md-6 col-lg-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <span class="text-teal">@Stars(review.Rating)</span>
+                                @if (!string.IsNullOrEmpty(review.ServiceCategory))
+                                {
+                                    <span class="category-pill">@review.ServiceCategory</span>
+                                }
+                            </div>
+                            <p>"@review.ReviewText"</p>
+                            <div class="d-flex align-items-center gap-2 mt-3">
+                                <span class="avatar-circle">@review.ClientFirstName[..1]</span>
+                                <div>
+                                    <div class="fw-semibold">@review.ClientFirstName</div>
+                                    @if (!string.IsNullOrEmpty(review.ServiceName))
+                                    {
+                                        <div class="text-sage small">@review.ServiceName</div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+
+        @if (!FilteredReviews.Any())
+        {
+            <p class="text-center text-sage mt-4">No reviews match these filters.</p>
+        }
+    }
+</div>
+
+@code {
+    private List<ReviewView>? allReviews;
+    private List<string> categories = [];
+    private double averageRating;
+    private string selectedCategory = "";
+    private string selectedRating = "0";
+
+    private IEnumerable<ReviewView> FilteredReviews =>
+        allReviews!.Where(r =>
+            (string.IsNullOrEmpty(selectedCategory) || r.ServiceCategory == selectedCategory) &&
+            (selectedRating == "0" || r.Rating == int.Parse(selectedRating)));
+
+    protected override async Task OnInitializedAsync()
+    {
+        var testimonials = await Db.Testimonials
+            .Where(t => t.ApprovalStatus == "Approved")
+            .OrderByDescending(t => t.CreatedAt)
+            .ToListAsync();
+
+        var clients = await Db.Users.ToDictionaryAsync(u => u.Id);
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+
+        allReviews = testimonials.Select(t =>
+        {
+            var client = clients.GetValueOrDefault(t.ClientId);
+            var service = t.ServiceId.HasValue ? services.GetValueOrDefault(t.ServiceId.Value) : null;
+            return new ReviewView(t.Rating, t.ReviewText, client?.FirstName ?? "Guest", service?.Name, service?.Category);
+        }).ToList();
+
+        categories = allReviews
+            .Where(r => !string.IsNullOrEmpty(r.ServiceCategory))
+            .Select(r => r.ServiceCategory!)
+            .Distinct()
+            .OrderBy(c => c)
+            .ToList();
+
+        averageRating = allReviews.Count > 0 ? allReviews.Average(r => r.Rating) : 0;
+    }
+
+    private static string Stars(int rating) => new string('★', rating) + new string('☆', 5 - rating);
+
+    private record ReviewView(int Rating, string ReviewText, string ClientFirstName, string? ServiceName, string? ServiceCategory);
+}

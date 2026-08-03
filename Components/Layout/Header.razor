@@ -1,0 +1,104 @@
+<header class="site-header">
+    <div class="container-fluid px-3 px-lg-4">
+        <input type="checkbox" class="mobile-nav-toggle d-lg-none" id="mobileNavToggle" title="Menu" />
+        <div class="d-flex align-items-center justify-content-between py-2">
+            <a href="" class="site-logo d-flex align-items-center text-decoration-none">
+                <span class="logo-emblem" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 2C12 2 8 6 8 10.5C8 13 9.8 15 12 15C14.2 15 16 13 16 10.5C16 6 12 2 12 2Z" fill="white" />
+                        <path d="M12 15V22" stroke="white" stroke-width="1.5" stroke-linecap="round" />
+                        <path d="M12 18C12 18 8.5 17 7 14" stroke="white" stroke-width="1.5" stroke-linecap="round" />
+                        <path d="M12 18C12 18 15.5 17 17 14" stroke="white" stroke-width="1.5" stroke-linecap="round" />
+                    </svg>
+                </span>
+                <span class="logo-text ms-2">
+                    <span class="logo-title d-block">Fargo Spa</span>
+                    <span class="logo-subtitle d-block">Wellness Center</span>
+                </span>
+            </a>
+
+            <nav class="site-nav d-none d-lg-flex">
+                <NavLink class="nav-pill" href="" Match="NavLinkMatch.All">Home</NavLink>
+                <NavLink class="nav-pill" href="services">Services</NavLink>
+                <NavLink class="nav-pill" href="about">About</NavLink>
+                <NavLink class="nav-pill" href="testimonials">Testimonials</NavLink>
+                <NavLink class="nav-pill" href="contact">Contact</NavLink>
+            </nav>
+
+            <div class="d-flex align-items-center gap-2">
+                <a href="book" class="btn btn-primary rounded-pill px-4 d-none d-sm-inline-block">Book Now →</a>
+
+                <div class="dropdown">
+                    <button class="btn account-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <span aria-hidden="true">👤</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end account-menu">
+                        <AuthorizeView>
+                            <Authorized>
+                                <li class="dropdown-header">@context.User.Identity?.Name</li>
+                                <li><a class="dropdown-item" href="dashboard">Dashboard</a></li>
+                                <li><a class="dropdown-item" href="profile">Profile</a></li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li>
+                                    <form action="account/logout" method="post">
+                                        <AntiforgeryToken />
+                                        <button type="submit" class="dropdown-item">Log out</button>
+                                    </form>
+                                </li>
+                            </Authorized>
+                            <NotAuthorized>
+                                <li class="dropdown-header">Demo Login</li>
+                                <li>
+                                    <form action="account/demo-login" method="post">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="role" value="Client" />
+                                        <input type="hidden" name="redirect" value="/dashboard" />
+                                        <button type="submit" class="dropdown-item">Log in as Client</button>
+                                    </form>
+                                </li>
+                                <li>
+                                    <form action="account/demo-login" method="post">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="role" value="Provider" />
+                                        <input type="hidden" name="redirect" value="/admin/my-calendar" />
+                                        <button type="submit" class="dropdown-item">Log in as Provider</button>
+                                    </form>
+                                </li>
+                                <li>
+                                    <form action="account/demo-login" method="post">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="role" value="Admin" />
+                                        <input type="hidden" name="redirect" value="/admin/front-desk" />
+                                        <button type="submit" class="dropdown-item">Log in as Front Desk</button>
+                                    </form>
+                                </li>
+                                <li>
+                                    <form action="account/demo-login" method="post">
+                                        <AntiforgeryToken />
+                                        <input type="hidden" name="role" value="Admin" />
+                                        <input type="hidden" name="redirect" value="/admin" />
+                                        <button type="submit" class="dropdown-item">Log in as Admin</button>
+                                    </form>
+                                </li>
+                                <li><hr class="dropdown-divider" /></li>
+                                <li><a class="dropdown-item" href="login">Sign in with email</a></li>
+                                <li><a class="dropdown-item" href="register">Create account</a></li>
+                            </NotAuthorized>
+                        </AuthorizeView>
+                    </ul>
+                </div>
+
+                <label for="mobileNavToggle" class="mobile-nav-btn d-lg-none" aria-hidden="true">☰</label>
+            </div>
+        </div>
+
+        <nav class="site-nav-mobile d-lg-none">
+            <NavLink class="nav-pill" href="" Match="NavLinkMatch.All">Home</NavLink>
+            <NavLink class="nav-pill" href="services">Services</NavLink>
+            <NavLink class="nav-pill" href="about">About</NavLink>
+            <NavLink class="nav-pill" href="testimonials">Testimonials</NavLink>
+            <NavLink class="nav-pill" href="contact">Contact</NavLink>
+            <a href="book" class="btn btn-primary rounded-pill mt-2">Book Now →</a>
+        </nav>
+    </div>
+</header>

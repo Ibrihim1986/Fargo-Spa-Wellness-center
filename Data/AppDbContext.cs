@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Service> Services => Set<Service>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
+    public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -38,6 +39,18 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(t => t.ClientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Testimonial>()
+            .HasOne<Service>()
+            .WithMany()
+            .HasForeignKey(t => t.ServiceId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ProviderAvailability>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(a => a.ProviderId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -1,0 +1,47 @@
+.hero-section {
+    background: linear-gradient(135deg, #FFFDF9 0%, #F5EFE6 60%, #EAE1D1 100%);
+}
+
+.hero-inner {
+    max-width: 42rem;
+}
+
+.hero-badge {
+    display: inline-block;
+    background-color: rgba(124, 152, 133, 0.18);
+    color: #2E7D6B;
+    border-radius: 999px;
+    padding: 0.35rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 1.25rem;
+}
+
+.hero-headline {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 2.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    margin-bottom: 1.25rem;
+}
+
+.hero-subtext {
+    font-size: 1.1rem;
+    color: #4a4a4a;
+}
+
+.section-label {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #2E7D6B;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 576px) {
+    .hero-headline {
+        font-size: 2rem;
+    }
+}

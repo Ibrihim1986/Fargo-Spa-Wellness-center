@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Family_and_Spa_Wellness.Services;
 
@@ -29,21 +30,7 @@ public static class AccountAuthEndpoints
                 return Results.Redirect("/login?error=1");
             }
 
-            var claims = new List<Claim>
-            {
-                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new(ClaimTypes.Name, user.FullName),
-                new(ClaimTypes.Email, user.Email),
-                new(ClaimTypes.Role, user.Role),
-            };
-
-            var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
-            var principal = new ClaimsPrincipal(identity);
-
-            await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties
-            {
-                IsPersistent = true,
-            });
+            await SignInAsync(httpContext, user);
 
             if (!string.IsNullOrEmpty(returnUrl))
             {
@@ -60,10 +47,54 @@ public static class AccountAuthEndpoints
             return Results.Redirect(redirectUrl);
         });
 
+        app.MapPost("/account/demo-login", async (
+            HttpContext httpContext,
+            AppDbContext db,
+            IConfiguration configuration,
+            [FromForm] string role,
+            [FromForm] string? redirect) =>
+        {
+            var demoLoginEnabled = configuration.GetValue("DemoLogin:Enabled", true);
+            if (!demoLoginEnabled)
+            {
+                return Results.NotFound();
+            }
+
+            var user = await db.Users.Where(u => u.Role == role).OrderBy(u => u.Id).FirstOrDefaultAsync();
+            if (user is null)
+            {
+                return Results.Redirect("/login?error=1");
+            }
+
+            await SignInAsync(httpContext, user);
+
+            var safeRedirect = !string.IsNullOrEmpty(redirect) && redirect.StartsWith('/') ? redirect : "/dashboard";
+            return Results.Redirect(safeRedirect);
+        });
+
         app.MapPost("/account/logout", async (HttpContext httpContext) =>
         {
             await httpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.Redirect("/");
+        });
+    }
+
+    private static async Task SignInAsync(HttpContext httpContext, User user)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+            new(ClaimTypes.Name, user.FullName),
+            new(ClaimTypes.Email, user.Email),
+            new(ClaimTypes.Role, user.Role),
+        };
+
+        var identity = new ClaimsIdentity(claims, CookieAuthenticationDefaults.AuthenticationScheme);
+        var principal = new ClaimsPrincipal(identity);
+
+        await httpContext.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, principal, new AuthenticationProperties
+        {
+            IsPersistent = true,
         });
     }
 }

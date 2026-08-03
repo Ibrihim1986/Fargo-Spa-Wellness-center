@@ -1,0 +1,124 @@
+.site-header {
+    background-color: #FFFDF9;
+    border-bottom: 1px solid #EAE1D1;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo-emblem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    background-color: #2E7D6B;
+    flex-shrink: 0;
+}
+
+.logo-title {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #2C2C2C;
+    line-height: 1.1;
+}
+
+.logo-subtitle {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #2E7D6B;
+    line-height: 1.1;
+}
+
+.site-nav {
+    gap: 0.25rem;
+}
+
+.nav-pill {
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    color: #2C2C2C;
+    font-weight: 500;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.nav-pill:hover {
+    background-color: rgba(124, 152, 133, 0.18);
+    color: #2C2C2C;
+}
+
+.nav-pill.active {
+    background-color: #2E7D6B;
+    color: #fff;
+}
+
+.account-toggle {
+    border: 1px solid #EAE1D1;
+    border-radius: 999px;
+    background-color: #fff;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.account-toggle::after {
+    display: none;
+}
+
+.account-menu {
+    min-width: 15rem;
+    border-radius: 0.75rem;
+    border: 1px solid #EAE1D1;
+    box-shadow: 0 8px 24px rgba(44, 44, 44, 0.12);
+    padding: 0.5rem 0;
+}
+
+.account-menu .dropdown-header {
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7C9885;
+}
+
+.account-menu .dropdown-item {
+    padding: 0.5rem 1rem;
+}
+
+.account-menu form {
+    margin: 0;
+}
+
+.mobile-nav-toggle {
+    display: none;
+    position: absolute;
+}
+
+.mobile-nav-btn {
+    border: 1px solid #EAE1D1;
+    border-radius: 0.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+
+.site-nav-mobile {
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding-bottom: 0.75rem;
+}
+
+.mobile-nav-toggle:checked ~ .site-nav-mobile {
+    display: flex;
+}

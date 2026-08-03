@@ -8,45 +8,69 @@
 
 <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
     <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin" Match="NavLinkMatch.All">
-                Dashboard
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin" Match="NavLinkMatch.All">
+                        Dashboard
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
-        <div class="nav-section-label">Front Desk</div>
+        <AuthorizeView Roles="Provider">
+            <Authorized>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/my-calendar">
+                        My Calendar
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin/checkout">
-                Checkout
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="Admin">
+            <Authorized>
+                <div class="nav-section-label">Front Desk</div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin/fees">
-                Fees
-            </NavLink>
-        </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/front-desk">
+                        Front Desk
+                    </NavLink>
+                </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin/gift-cards">
-                Gift Cards
-            </NavLink>
-        </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/checkout">
+                        Checkout
+                    </NavLink>
+                </div>
 
-        <div class="nav-section-label">Clients</div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/fees">
+                        Fees
+                    </NavLink>
+                </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin/waivers">
-                Waiver Status
-            </NavLink>
-        </div>
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/gift-cards">
+                        Gift Cards
+                    </NavLink>
+                </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="admin/service-notes">
-                Service Notes
-            </NavLink>
-        </div>
+                <div class="nav-section-label">Clients</div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/waivers">
+                        Waiver Status
+                    </NavLink>
+                </div>
+
+                <div class="nav-item px-3">
+                    <NavLink class="nav-link" href="admin/service-notes">
+                        Service Notes
+                    </NavLink>
+                </div>
+            </Authorized>
+        </AuthorizeView>
 
         <div class="nav-section-label">Site</div>
 

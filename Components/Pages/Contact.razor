@@ -1,6 +1,98 @@
 @page "/contact"
+@rendermode InteractiveServer
+@using System.ComponentModel.DataAnnotations
 
 <PageTitle>Contact - Fargo Spa and Wellness</PageTitle>
 
-<h1>Contact Us</h1>
-<p>Have questions? Reach out and our team will get back to you soon.</p>
+<div class="container-fluid px-3 px-lg-5 py-5">
+    <div class="text-center mx-auto mb-5" style="max-width: 36rem;">
+        <h1>Contact Us</h1>
+        <p class="fs-5">Have a question or ready to book? We are here to help you plan your perfect spa experience.</p>
+    </div>
+
+    <div class="row g-4 justify-content-center">
+        <div class="col-12 col-lg-4">
+            <h5 class="mb-3">Get in touch</h5>
+            <div class="card mb-3">
+                <div class="card-body d-flex gap-3">
+                    <span class="contact-icon" aria-hidden="true">📍</span>
+                    <div>
+                        <div class="fw-semibold">Address</div>
+                        <div class="text-sage">301 2nd Ave N, Fargo, ND 58102</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-body d-flex gap-3">
+                    <span class="contact-icon" aria-hidden="true">📞</span>
+                    <div>
+                        <div class="fw-semibold">Phone</div>
+                        <div class="text-sage">(701) 555-0100</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-3">Send us a message</h5>
+
+                    @if (submitted)
+                    {
+                        <p class="text-teal">Thanks! Your message has been sent — we'll be in touch soon.</p>
+                    }
+
+                    <EditForm Model="model" OnValidSubmit="HandleSubmit" FormName="contact">
+                        <DataAnnotationsValidator />
+                        <div class="mb-3">
+                            <label class="form-label" for="name">Name</label>
+                            <InputText id="name" class="form-control" @bind-Value="model.Name" />
+                            <ValidationMessage For="() => model.Name" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="phone">Phone</label>
+                            <InputText id="phone" class="form-control" @bind-Value="model.Phone" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="email">Email</label>
+                            <InputText id="email" class="form-control" @bind-Value="model.Email" />
+                            <ValidationMessage For="() => model.Email" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="message">Message</label>
+                            <InputTextArea id="message" class="form-control" rows="4" @bind-Value="model.Message" />
+                            <ValidationMessage For="() => model.Message" />
+                        </div>
+                        <button class="btn btn-primary rounded-pill px-4" type="submit">Send Message</button>
+                    </EditForm>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly ContactModel model = new();
+    private bool submitted;
+
+    private void HandleSubmit()
+    {
+        submitted = true;
+    }
+
+    private class ContactModel
+    {
+        [Required]
+        public string Name { get; set; } = "";
+
+        public string Phone { get; set; } = "";
+
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        public string Message { get; set; } = "";
+    }
+}

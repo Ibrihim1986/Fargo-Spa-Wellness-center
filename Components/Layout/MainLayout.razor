@@ -1,33 +1,13 @@
 @inherits LayoutComponentBase
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<div class="site-shell">
+    <Header />
 
-    <main>
-        <div class="top-row px-4">
-            <AuthorizeView>
-                <Authorized>
-                    <span class="me-3">Hello, @context.User.Identity?.Name</span>
-                    <form action="account/logout" method="post">
-                        <AntiforgeryToken />
-                        <button type="submit" class="btn btn-link">Log out</button>
-                    </form>
-                </Authorized>
-                <NotAuthorized>
-                    <a href="login">Login</a>
-                    <a href="register">Register</a>
-                </NotAuthorized>
-            </AuthorizeView>
-        </div>
-
-        <article class="content px-4">
-            @Body
-        </article>
-
-        <Footer />
+    <main class="site-main">
+        @Body
     </main>
+
+    <Footer />
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>

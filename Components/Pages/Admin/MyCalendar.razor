@@ -1,0 +1,155 @@
+@page "/admin/my-calendar"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Provider")]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>My Calendar - Fargo Spa and Wellness</PageTitle>
+
+<h1>My Calendar</h1>
+
+@if (provider is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="d-flex flex-column gap-2 mb-5">
+        @if (upcomingAppointments.Count == 0)
+        {
+            <p class="text-sage">No upcoming appointments.</p>
+        }
+        @foreach (var row in upcomingAppointments)
+        {
+            <div class="card">
+                <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                    <div class="booking-time">
+                        <div class="fw-semibold">@row.Appointment.StartTime.ToString("MMM d, h:mm tt")</div>
+                        <span class="status-badge">@row.Appointment.Status</span>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">@row.Client?.FullName</div>
+                        <div class="text-sage small">@row.Service?.Name — @row.Client?.Phone</div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => CompleteAppointment(row.Appointment)">Complete</button>
+                        <button class="btn btn-sm btn-outline-secondary" disabled title="Coming soon">Note</button>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <h2>My Availability</h2>
+    <p class="text-sage">Toggle time blocks to mark yourself unavailable. Booked times are shown for reference.</p>
+
+    <div class="d-flex flex-wrap gap-2 mt-3">
+        @foreach (var hour in AvailabilityHours)
+        {
+            var isBooked = bookedHoursToday.Contains(hour);
+            var isUnavailable = unavailableHoursToday.Contains(hour);
+            <button class="btn slot-btn @(isBooked ? "slot-booked" : isUnavailable ? "slot-unavailable" : "slot-available")"
+                    disabled="@isBooked"
+                    @onclick="() => ToggleAvailability(hour)">
+                @FormatHour(hour)
+                <div class="slot-state">@(isBooked ? "Booked" : isUnavailable ? "Unavailable" : "Available")</div>
+            </button>
+        }
+    </div>
+}
+
+@code {
+    private User? provider;
+    private List<BookingRow> upcomingAppointments = [];
+    private HashSet<int> bookedHoursToday = [];
+    private HashSet<int> unavailableHoursToday = [];
+
+    private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (string.IsNullOrEmpty(email))
+        {
+            return;
+        }
+
+        provider = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        if (provider is null)
+        {
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var now = DateTime.Now;
+        var appointments = await Db.Appointments
+            .Where(a => a.ProviderId == provider!.Id && a.StartTime >= now.Date)
+            .OrderBy(a => a.StartTime)
+            .ToListAsync();
+
+        var users = await Db.Users.ToDictionaryAsync(u => u.Id);
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+
+        upcomingAppointments = appointments
+            .Where(a => a.Status is "Upcoming" or "CheckedIn")
+            .Select(a => new BookingRow(a, users.GetValueOrDefault(a.ClientId), services.GetValueOrDefault(a.ServiceId)))
+            .ToList();
+
+        bookedHoursToday = appointments
+            .Where(a => a.StartTime.Date == DateTime.Today)
+            .Select(a => a.StartTime.Hour)
+            .ToHashSet();
+
+        unavailableHoursToday = (await Db.ProviderAvailabilities
+            .Where(a => a.ProviderId == provider!.Id && a.Date == DateTime.Today && !a.IsAvailable)
+            .Select(a => a.Hour)
+            .ToListAsync())
+            .ToHashSet();
+    }
+
+    private async Task CompleteAppointment(Appointment appointment)
+    {
+        appointment.Status = "Completed";
+        Db.Appointments.Update(appointment);
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private async Task ToggleAvailability(int hour)
+    {
+        var existing = await Db.ProviderAvailabilities
+            .FirstOrDefaultAsync(a => a.ProviderId == provider!.Id && a.Date == DateTime.Today && a.Hour == hour);
+
+        if (existing is not null)
+        {
+            Db.ProviderAvailabilities.Remove(existing);
+        }
+        else
+        {
+            Db.ProviderAvailabilities.Add(new ProviderAvailability
+            {
+                ProviderId = provider!.Id,
+                Date = DateTime.Today,
+                Hour = hour,
+                IsAvailable = false,
+            });
+        }
+
+        await Db.SaveChangesAsync();
+        await LoadAsync();
+    }
+
+    private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
+
+    private record BookingRow(Appointment Appointment, User? Client, Service? Service);
+}
