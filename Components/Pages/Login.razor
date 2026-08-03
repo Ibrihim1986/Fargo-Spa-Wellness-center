@@ -1,0 +1,28 @@
+@page "/login"
+
+<PageTitle>Login - Fargo Spa and Wellness</PageTitle>
+
+<h1>Login</h1>
+
+@if (HttpContext?.Request.Query.ContainsKey("error") == true)
+{
+    <p class="text-danger">Invalid email or password.</p>
+}
+
+<form action="account/login" method="post">
+    <AntiforgeryToken />
+    <div class="mb-3">
+        <label class="form-label" for="email">Email</label>
+        <input class="form-control" type="email" id="email" name="email" required />
+    </div>
+    <div class="mb-3">
+        <label class="form-label" for="password">Password</label>
+        <input class="form-control" type="password" id="password" name="password" required />
+    </div>
+    <button class="btn btn-primary" type="submit">Log in</button>
+</form>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+}

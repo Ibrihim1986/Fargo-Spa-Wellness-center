@@ -1,0 +1,31 @@
+@page "/services"
+@using Family_and_Spa_Wellness.Data
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<PageTitle>Services - Fargo Spa and Wellness</PageTitle>
+
+<h1>Our Services</h1>
+
+@if (services is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var service in services)
+        {
+            <li>@service.Name — @service.DurationMinutes min — @service.Price.ToString("C")</li>
+        }
+    </ul>
+}
+
+@code {
+    private List<Family_and_Spa_Wellness.Models.Service>? services;
+
+    protected override async Task OnInitializedAsync()
+    {
+        services = await Db.Services.Where(s => s.IsActive).ToListAsync();
+    }
+}
