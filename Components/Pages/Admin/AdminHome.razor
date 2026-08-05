@@ -6,6 +6,9 @@
 @using Family_and_Spa_Wellness.Models
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+@using System.Security.Claims
+@using System.Text.Json
 
 <PageTitle>Admin - Fargo Spa and Wellness</PageTitle>
 
@@ -164,6 +167,8 @@ else if (activeTab == "promotions")
 
     private List<Service> services = [];
     private List<User> staff = [];
+    private bool showForm = false;
+    private Service? editService;
 
     private static readonly string[] ChartPalette = ["#2E7D6B", "#7C9885", "#C9AE80", "#4a6b60", "#a3b8a9", "#8a765a"];
 
@@ -232,4 +237,42 @@ else if (activeTab == "promotions")
 
     private record WeekBucket(string Label, int Count);
     private record CategorySlice(string Category, decimal Amount, string Color);
+
+    private async Task SaveService()
+    {
+        if (editService == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(editService.Name))
+            return;
+
+        // Create approval request instead of applying immediately
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        var requesterId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        var requesterEmail = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+
+        var payload = JsonSerializer.Serialize(editService);
+        var req = new ApprovalRequest
+        {
+            EntityType = "Service",
+            Action = editService.Id == 0 ? "Create" : "Update",
+            EntityId = editService.Id == 0 ? null : editService.Id,
+            Payload = payload,
+            RequestedById = requesterId,
+            RequestedByEmail = requesterEmail,
+            RequestedAt = DateTime.UtcNow,
+            Status = "Pending"
+        };
+
+        Db.ApprovalRequests.Add(req);
+        await Db.SaveChangesAsync();
+
+        // Refresh services list to show submitted state; do not apply change until approval
+        services = await Db.Services.ToListAsync();
+        showForm = false;
+        editService = null;
+        StateHasChanged();
+    }
+
 }

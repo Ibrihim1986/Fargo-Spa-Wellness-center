@@ -1,0 +1,178 @@
+@page "/admin/approvals"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@using System.Text.Json
+@using System.Security.Claims
+@inject AppDbContext Db
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+@inject Family_and_Spa_Wellness.Services.IEmailSender EmailSender
+
+<PageTitle>Approvals - Admin</PageTitle>
+
+<h3>Pending Approvals</h3>
+
+@if (requests is null)
+{
+    <p>Loading...</p>
+}
+else if (!requests.Any())
+{
+    <p>No pending approvals.</p>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Submitted</th>
+                    <th>Entity</th>
+                    <th>Action</th>
+                    <th>Details</th>
+                    <th>Requested By</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in requests)
+                {
+                    <tr>
+                        <td>@r.RequestedAt.ToLocalTime().ToString("g")</td>
+                        <td>@r.EntityType</td>
+                        <td>@r.Action</td>
+                        <td><pre class="small">@ShortPayload(r.Payload)</pre></td>
+                        <td>@r.RequestedByEmail</td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-success me-2" @onclick="() => Approve(r)">Approve</button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => Reject(r)">Reject</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@code {
+    private List<ApprovalRequest>? requests;
+
+    protected override async Task OnInitializedAsync()
+    {
+        requests = await Db.ApprovalRequests.Where(r => r.Status == "Pending").OrderBy(r => r.RequestedAt).ToListAsync();
+    }
+
+    private string ShortPayload(string payload)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(payload);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                var props = doc.RootElement.EnumerateObject().Select(p => $"{p.Name}: {p.Value.ToString()}").Take(5);
+                return string.Join("\n", props);
+            }
+            return payload.Length > 200 ? payload[..200] + "..." : payload;
+        }
+        catch
+        {
+            return payload.Length > 200 ? payload[..200] + "..." : payload;
+        }
+    }
+
+    private async Task Approve(ApprovalRequest req)
+    {
+        // Apply the payload to the DB depending on entity type
+        if (req.EntityType == "Service")
+        {
+            var svc = JsonSerializer.Deserialize<Service>(req.Payload);
+            if (svc is not null)
+            {
+                if (req.Action == "Create")
+                {
+                    Db.Services.Add(svc);
+                    await Db.SaveChangesAsync();
+                    req.EntityId = svc.Id;
+                }
+                else if (req.Action == "Update" && req.EntityId.HasValue)
+                {
+                    var dbSvc = await Db.Services.FindAsync(req.EntityId.Value);
+                    if (dbSvc is not null)
+                    {
+                        dbSvc.Name = svc.Name;
+                        dbSvc.Category = svc.Category;
+                        dbSvc.Description = svc.Description;
+                        dbSvc.DurationMinutes = svc.DurationMinutes;
+                        dbSvc.Price = svc.Price;
+                        dbSvc.IsActive = svc.IsActive;
+                    }
+                }
+            }
+        }
+        else if (req.EntityType == "ServicePricingTier")
+        {
+            var tier = JsonSerializer.Deserialize<ServicePricingTier>(req.Payload);
+            if (tier is not null)
+            {
+                if (req.Action == "Create")
+                {
+                    Db.Set<ServicePricingTier>().Add(tier);
+                    await Db.SaveChangesAsync();
+                    req.EntityId = tier.Id;
+                }
+                else if (req.Action == "Update" && req.EntityId.HasValue)
+                {
+                    var dbTier = await Db.Set<ServicePricingTier>().FindAsync(req.EntityId.Value);
+                    if (dbTier is not null)
+                    {
+                        dbTier.DurationMinutes = tier.DurationMinutes;
+                        dbTier.Price = tier.Price;
+                        dbTier.ProviderId = tier.ProviderId;
+                        dbTier.IsActive = tier.IsActive;
+                    }
+                }
+            }
+        }
+
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var reviewerId = int.Parse(auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+        req.Status = "Approved";
+        req.ReviewedById = reviewerId;
+        req.ReviewedAt = DateTime.UtcNow;
+
+        await Db.SaveChangesAsync();
+        requests = await Db.ApprovalRequests.Where(r => r.Status == "Pending").OrderBy(r => r.RequestedAt).ToListAsync();
+    }
+
+    private async Task Reject(ApprovalRequest req)
+    {
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var reviewerId = int.Parse(auth.User.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+
+        req.Status = "Rejected";
+        req.ReviewedById = reviewerId;
+        req.ReviewedAt = DateTime.UtcNow;
+        req.ReviewComment = "Rejected by manager";
+
+        await Db.SaveChangesAsync();
+
+        // Notify submitter by email (best-effort)
+        if (!string.IsNullOrEmpty(req.RequestedByEmail))
+        {
+            try
+            {
+                await EmailSender.SendEmailAsync(req.RequestedByEmail, "Your submission was rejected", $"Your submission for {req.EntityType} ({req.Action}) was rejected.");
+            }
+            catch
+            {
+                // ignore email failures
+            }
+        }
+
+        requests = await Db.ApprovalRequests.Where(r => r.Status == "Pending").OrderBy(r => r.RequestedAt).ToListAsync();
+    }
+}

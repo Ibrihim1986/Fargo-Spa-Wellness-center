@@ -1,0 +1,158 @@
+@page "/admin/services/pricing/{ServiceId:int}"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@using System.Security.Claims
+@inject AppDbContext Db
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Manage Pricing - Admin</PageTitle>
+
+<h3>Pricing for @service?.Name</h3>
+<p class="small text-muted">Define pricing tiers by duration and optional provider-specific overrides.</p>
+
+<div class="mb-3">
+    <button class="btn btn-sm btn-outline-primary me-2" @onclick="StartAddTier">Add Tier</button>
+    <NavLink class="btn btn-sm btn-outline-secondary" href="/admin">Back</NavLink>
+</div>
+
+@if (editTier is not null)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <EditForm Model="editTier" OnValidSubmit="SaveTier">
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label">Duration (min)</label>
+                        <InputNumber class="form-control" @bind-Value="editTier.DurationMinutes" />
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Price</label>
+                        <InputNumber class="form-control" @bind-Value="editTier.Price" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Provider (optional)</label>
+                        <InputSelect class="form-select" @bind-Value="editTier.ProviderId">
+                            <option value="">(global)</option>
+                            @foreach (var p in staff)
+                            {
+                                <option value="@p.Id">@p.FullName</option>
+                            }
+                        </InputSelect>
+                    </div>
+                    <div class="col-md-2 d-flex gap-2">
+                        <button class="btn btn-success" type="submit">Submit for Approval</button>
+                        <button class="btn btn-secondary" type="button" @onclick="() => editTier = null">Cancel</button>
+                    </div>
+                </div>
+            </EditForm>
+        </div>
+    </div>
+}
+
+<div class="table-responsive">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Duration</th>
+                <th>Price</th>
+                <th>Provider</th>
+                <th>Active</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tier in currentPricing)
+            {
+                <tr>
+                    <td>@tier.DurationMinutes min</td>
+                    <td>@tier.Price.ToString("C")</td>
+                    <td>@(tier.ProviderId.HasValue ? staff.FirstOrDefault(s => s.Id == tier.ProviderId)?.FullName : "(global)")</td>
+                    <td>@(tier.IsActive ? "Yes" : "No")</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => EditTier(tier)">Edit</button>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleTierActive(tier)">@(tier.IsActive ? "Deactivate" : "Activate")</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    [Parameter]
+    public int ServiceId { get; set; }
+
+    private Service? service;
+    private List<User> staff = [];
+    private List<ServicePricingTier> currentPricing = [];
+    private ServicePricingTier? editTier;
+
+    protected override async Task OnInitializedAsync()
+    {
+        service = await Db.Services.FindAsync(ServiceId);
+        staff = await Db.Users.Where(u => u.Role == "Provider").ToListAsync();
+        currentPricing = await Db.Set<ServicePricingTier>().Where(t => t.ServiceId == ServiceId).ToListAsync();
+    }
+
+    private void StartAddTier()
+    {
+        editTier = new ServicePricingTier { ServiceId = ServiceId, IsActive = true };
+    }
+
+    private void EditTier(ServicePricingTier tier)
+    {
+        editTier = new ServicePricingTier
+        {
+            Id = tier.Id,
+            ServiceId = tier.ServiceId,
+            ProviderId = tier.ProviderId,
+            DurationMinutes = tier.DurationMinutes,
+            Price = tier.Price,
+            IsActive = tier.IsActive
+        };
+    }
+
+    private async Task SaveTier()
+    {
+        if (editTier is null) return;
+
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        var requesterId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        var requesterEmail = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+
+        var payload = JsonSerializer.Serialize(editTier);
+        var req = new ApprovalRequest
+        {
+            EntityType = "ServicePricingTier",
+            Action = editTier.Id == 0 ? "Create" : "Update",
+            EntityId = editTier.Id == 0 ? null : editTier.Id,
+            Payload = payload,
+            RequestedById = requesterId,
+            RequestedByEmail = requesterEmail,
+            RequestedAt = DateTime.UtcNow,
+            Status = "Pending"
+        };
+
+        Db.ApprovalRequests.Add(req);
+        await Db.SaveChangesAsync();
+
+        currentPricing = await Db.Set<ServicePricingTier>().Where(t => t.ServiceId == ServiceId).ToListAsync();
+        editTier = null;
+    }
+
+    private async Task ToggleTierActive(ServicePricingTier tier)
+    {
+        var dbTier = await Db.Set<ServicePricingTier>().FindAsync(tier.Id);
+        if (dbTier is null) return;
+        dbTier.IsActive = !dbTier.IsActive;
+        await Db.SaveChangesAsync();
+        currentPricing = await Db.Set<ServicePricingTier>().Where(t => t.ServiceId == ServiceId).ToListAsync();
+    }
+}
