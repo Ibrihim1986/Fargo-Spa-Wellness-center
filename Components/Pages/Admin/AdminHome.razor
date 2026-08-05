@@ -5,6 +5,7 @@
 @using Family_and_Spa_Wellness.Data
 @using Family_and_Spa_Wellness.Models
 @using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Components.Forms
 @inject AppDbContext Db
 
 <PageTitle>Admin - Fargo Spa and Wellness</PageTitle>
@@ -109,22 +110,87 @@
 }
 else if (activeTab == "services")
 {
+    <div class="mb-3 d-flex justify-content-between align-items-center">
+        <h4 class="m-0">Service Catalog (admin)</h4>
+        <button class="btn btn-primary" @onclick="StartAdd">Add Service</button>
+    </div>
+
+    @if (showForm && editService is not null)
+    {
+        <div class="card mb-3">
+            <div class="card-body">
+                <EditForm Model="editService" OnValidSubmit="SaveService">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <label class="form-label">Name</label>
+                            <InputText class="form-control" @bind-Value="editService.Name" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Category</label>
+                            <InputText class="form-control" @bind-Value="editService.Category" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label">Description</label>
+                            <InputTextArea class="form-control" @bind-Value="editService.Description" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Duration (min)</label>
+                            <InputNumber class="form-control" @bind-Value="editService.DurationMinutes" />
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Price</label>
+                            <InputNumber class="form-control" @bind-Value="editService.Price" />
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="form-check">
+                                <InputCheckbox class="form-check-input" @bind-Value="editService.IsActive" id="isActive" />
+                                <label class="form-check-label" for="isActive">Active</label>
+                            </div>
+                        </div>
+                        <div class="col-12 d-flex gap-2">
+                            <button class="btn btn-success" type="submit">Save</button>
+                            <button class="btn btn-secondary" type="button" @onclick="CancelEdit">Cancel</button>
+                        </div>
+                    </div>
+                </EditForm>
+            </div>
+        </div>
+    }
+
     <div class="row g-3">
         @foreach (var service in services)
         {
             <div class="col-12 col-md-6 col-lg-4">
                 <div class="card h-100">
-                    <div class="card-body">
-                        <h6>@service.Name</h6>
-                        <p class="text-sage mb-1">@service.Category — @service.DurationMinutes min</p>
-                        <p class="fw-bold text-teal mb-0">
-                            @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
-                        </p>
+                    <div class="card-body d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-start mb-1">
+                                <h6 class="mb-0">@service.Name</h6>
+                                @if (!service.IsActive)
+                                {
+                                    <span class="badge bg-secondary">Inactive</span>
+                                }
+                            </div>
+                            <p class="text-sage mb-1">@service.Category — @service.DurationMinutes min</p>
+                            <p class="mb-2">@service.Description</p>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-2">
+                            <div class="fw-bold text-teal">
+                                @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
+                            </div>
+                            <div>
+                                <a class="btn btn-sm btn-outline-secondary me-2" href="/admin/services/pricing/@service.Id">Manage Pricing</a>
+                                <button class="btn btn-sm btn-outline-primary me-2" @onclick="() => Edit(service)">Edit</button>
+                                <button class="btn btn-sm @(service.IsActive ? "btn-outline-danger" : "btn-outline-success")" @onclick="() => ToggleActive(service)">@(service.IsActive ? "Deactivate" : "Activate")</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         }
     </div>
+
+    <!-- Pricing management is available on a separate page: /admin/services/pricing/{id} -->
 }
 else if (activeTab == "staff")
 {
@@ -165,11 +231,15 @@ else if (activeTab == "promotions")
     private List<Service> services = [];
     private List<User> staff = [];
 
+    private bool showForm = false;
+    private Service? editService;
+    // Pricing management moved to dedicated admin page (/admin/services/pricing/{id})
+
     private static readonly string[] ChartPalette = ["#2E7D6B", "#7C9885", "#C9AE80", "#4a6b60", "#a3b8a9", "#8a765a"];
 
     protected override async Task OnInitializedAsync()
     {
-        services = await Db.Services.Where(s => s.IsActive).ToListAsync();
+        services = await Db.Services.ToListAsync();
         staff = await Db.Users.Where(u => u.Role == "Provider").ToListAsync();
 
         var appointments = await Db.Appointments.ToListAsync();
@@ -229,6 +299,84 @@ else if (activeTab == "promotions")
             ? $"conic-gradient({string.Join(", ", gradientStops)})"
             : "#F5EFE6";
     }
+
+    private void StartAdd()
+    {
+        editService = new Service { IsActive = true };
+        showForm = true;
+    }
+
+
+
+    private void Edit(Service svc)
+    {
+        // Make a shallow copy to edit without mutating list until saved
+        editService = new Service
+        {
+            Id = svc.Id,
+            Name = svc.Name,
+            Category = svc.Category,
+            Description = svc.Description,
+            DurationMinutes = svc.DurationMinutes,
+            Price = svc.Price,
+            IsActive = svc.IsActive
+        };
+        showForm = true;
+    }
+
+    private async Task SaveService()
+    {
+        if (editService == null)
+            return;
+
+        if (string.IsNullOrWhiteSpace(editService.Name))
+            return;
+
+        if (editService.Id == 0)
+        {
+            Db.Services.Add(editService);
+        }
+        else
+        {
+            var dbSvc = await Db.Services.FindAsync(editService.Id);
+            if (dbSvc is null)
+                return;
+
+            dbSvc.Name = editService.Name;
+            dbSvc.Category = editService.Category;
+            dbSvc.Description = editService.Description;
+            dbSvc.DurationMinutes = editService.DurationMinutes;
+            dbSvc.Price = editService.Price;
+            dbSvc.IsActive = editService.IsActive;
+        }
+
+        await Db.SaveChangesAsync();
+        services = await Db.Services.ToListAsync();
+        showForm = false;
+        editService = null;
+        StateHasChanged();
+    }
+
+    private void CancelEdit()
+    {
+        showForm = false;
+        editService = null;
+    }
+
+    private async Task ToggleActive(Service svc)
+    {
+        var dbSvc = await Db.Services.FindAsync(svc.Id);
+        if (dbSvc is null)
+            return;
+
+        dbSvc.IsActive = !dbSvc.IsActive;
+        await Db.SaveChangesAsync();
+        services = await Db.Services.ToListAsync();
+        StateHasChanged();
+    }
+
+    // Pricing methods
+    // Pricing methods moved to Components/Pages/Admin/ServicePricing.razor
 
     private record WeekBucket(string Label, int Count);
     private record CategorySlice(string Category, decimal Amount, string Color);

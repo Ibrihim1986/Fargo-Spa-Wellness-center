@@ -8,6 +8,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 {
     public DbSet<User> Users => Set<User>();
     public DbSet<Service> Services => Set<Service>();
+    public DbSet<ServicePricingTier> ServicePricingTiers => Set<ServicePricingTier>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();

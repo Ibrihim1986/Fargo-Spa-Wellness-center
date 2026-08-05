@@ -28,9 +28,19 @@ else
                         </div>
                         <p class="text-sage mb-2">@service.Category — @service.DurationMinutes min</p>
                         <p class="flex-grow-1">@service.Description</p>
-                        <p class="fw-bold text-teal mb-0">
-                            @(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")
-                        </p>
+                        @if (tiersByService.TryGetValue(service.Id, out var tiers) && tiers.Count > 0)
+                        {
+                            <ul class="list-unstyled mb-0">
+                                @foreach (var t in tiers.OrderBy(t => t.DurationMinutes))
+                                {
+                                    <li>@t.DurationMinutes min — @t.Price.ToString("C")</li>
+                                }
+                            </ul>
+                        }
+                        else
+                        {
+                            <p class="fw-bold text-teal mb-0">@(service.Price > 0 ? service.Price.ToString("C") : "Contact for pricing")</p>
+                        }
                     </div>
                 </div>
             </div>
@@ -40,9 +50,12 @@ else
 
 @code {
     private List<Family_and_Spa_Wellness.Models.Service>? services;
+    private Dictionary<int, List<Family_and_Spa_Wellness.Models.ServicePricingTier>> tiersByService = new();
 
     protected override async Task OnInitializedAsync()
     {
         services = await Db.Services.Where(s => s.IsActive).ToListAsync();
+        var tiers = await Db.Set<Family_and_Spa_Wellness.Models.ServicePricingTier>().Where(t => t.IsActive && t.ProviderId == null).ToListAsync();
+        tiersByService = tiers.GroupBy(t => t.ServiceId).ToDictionary(g => g.Key, g => g.ToList());
     }
 }

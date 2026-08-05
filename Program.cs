@@ -34,6 +34,8 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminBypassRolesHandler>();
 builder.Services.AddCascadingAuthenticationState();
 // Staff management service
 builder.Services.AddScoped<StaffService>();
+// Pricing service for tiered and provider-specific pricing
+builder.Services.AddScoped<PricingService>();
 
 var app = builder.Build();
 
