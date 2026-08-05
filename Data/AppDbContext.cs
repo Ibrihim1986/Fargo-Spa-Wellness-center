@@ -1,3 +1,4 @@
+using System;
 using Family_and_Spa_Wellness.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
+    public DbSet<Staff> Staff => Set<Staff>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -52,5 +54,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .WithMany()
             .HasForeignKey(a => a.ProviderId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Use fixed, deterministic CreatedAt values to avoid EF Core "pending model changes" caused by
+        // non-deterministic default initializers (e.g. DateTime.UtcNow) when seeding with HasData.
+        modelBuilder.Entity<Staff>().HasData(
+            new Staff { Id = 1, FirstName = "Alice", LastName = "Manager", Email = "alice@fargospa.com", Role = Role.Manager, IsActive = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Staff { Id = 2, FirstName = "Bob", LastName = "Reception", Email = "bob@fargospa.com", Role = Role.Reception, IsActive = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Staff { Id = 3, FirstName = "Carol", LastName = "Therapist", Email = "carol@fargospa.com", Role = Role.Therapist, IsActive = true, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) },
+            new Staff { Id = 4, FirstName = "Dave", LastName = "Viewer", Email = "dave@fargospa.com", Role = Role.Viewer, IsActive = false, CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc) }
+        );
     }
 }

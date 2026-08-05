@@ -32,6 +32,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IAuthorizationHandler, AdminBypassRolesHandler>();
 builder.Services.AddCascadingAuthenticationState();
+// Staff management service
+builder.Services.AddScoped<StaffService>();
 
 var app = builder.Build();
 

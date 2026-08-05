@@ -30,6 +30,13 @@ public static class AccountAuthEndpoints
                 return Results.Redirect("/login?error=1");
             }
 
+            // If there is a linked Staff record and the account is inactive, deny login
+            var staffRecord = await db.Staff.FirstOrDefaultAsync(s => s.Email == user.Email);
+            if (staffRecord is not null && !staffRecord.IsActive)
+            {
+                return Results.Redirect("/login?error=disabled");
+            }
+
             await SignInAsync(httpContext, user);
 
             if (!string.IsNullOrEmpty(returnUrl))
