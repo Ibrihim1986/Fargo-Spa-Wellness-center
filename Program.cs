@@ -34,7 +34,7 @@ builder.Services.AddSingleton<IAuthorizationHandler, AdminBypassRolesHandler>();
 builder.Services.AddCascadingAuthenticationState();
 // Register ExportService
 builder.Services.AddScoped<ExportService>();
-
+builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
