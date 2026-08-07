@@ -13,4 +13,7 @@ public class User
     public string? Title { get; set; } // Provider job title, e.g. "Massage Therapist"
     public string? Bio { get; set; } // Provider bio/specialties
     public string FullName => $"{FirstName} {LastName}";
+
+    // US-705/US-714: how this user wants booking notices delivered
+    public string NotificationChannel { get; set; } = "Email"; // Email, SMS, Both
 }
