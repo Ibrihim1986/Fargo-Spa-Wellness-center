@@ -1,0 +1,307 @@
+@page "/admin/revenue-dashboard"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin,Manager")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<PageTitle>Revenue Dashboard - Admin</PageTitle>
+
+<h3>Revenue Dashboard</h3>
+
+<div class="d-flex gap-3 align-items-center mb-3">
+    <div>
+        <strong>Totals:</strong>
+    </div>
+    <div>Day: <strong>@dayTotal.ToString("C")</strong></div>
+    <div>Week: <strong>@weekTotal.ToString("C")</strong></div>
+    <div>Month: <strong>@monthTotal.ToString("C")</strong></div>
+    <div class="ms-auto">
+        <label class="me-2">View:</label>
+        <select class="form-select d-inline-block w-auto" @onchange="OnPeriodChanged">
+            <option value="day">Day (hours)</option>
+            <option value="week">Week (days)</option>
+            <option value="month">Month (days)</option>
+        </select>
+    </div>
+</div>
+
+<div class="card mb-3">
+    <div class="card-body">
+        <h5>Revenue Chart (@period)</h5>
+
+        @if (!hasData)
+        {
+            <div class="alert alert-secondary">No data available for the selected period.</div>
+        }
+        else
+        {
+            <div class="chart d-flex align-items-end" style="height:240px;gap:6px">
+                @foreach (var b in buckets)
+                {
+                    <div class="d-flex flex-column align-items-center" style="width:100%;">
+                        <div class="bar bg-teal" style="height:@(b.Value == 0 ? 4 : b.Value / maxBucketValue * 100)%; width:100%"></div>
+                        <div class="small mt-2">@b.Label</div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Services by Revenue</h5>
+                <div class="d-flex gap-2 mb-2 align-items-center">
+                    <label class="m-0">Range:</label>
+                    <InputDate @bind-Value="startDate" class="form-control form-control-sm w-auto" />
+                    <InputDate @bind-Value="endDate" class="form-control form-control-sm w-auto" />
+                    <button class="btn btn-sm btn-primary" @onclick="ApplyRangeAsync">Apply</button>
+                </div>
+
+                @if (serviceStats is null || !serviceStats.Any())
+                {
+                    <div class="text-muted">No data available for the selected range.</div>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Service</th>
+                                <th class="text-end">Revenue <button class="btn btn-link btn-sm" @onclick="ToggleServiceSort">@((serviceSortDesc) ? "▼" : "▲")</button></th>
+                                <th class="text-end">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < serviceStats.Count; i++)
+                            {
+                                var s = serviceStats[i];
+                                <tr>
+                                    <td>@(i+1)</td>
+                                    <td>@s.Name</td>
+                                    <td class="text-end">@s.Total.ToString("C")</td>
+                                    <td class="text-end">@s.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Providers by Revenue</h5>
+                @if (providerStats is null || !providerStats.Any())
+                {
+                    <div class="text-muted">No data available for the selected range.</div>
+                }
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Rank</th>
+                                <th>Provider</th>
+                                <th class="text-end">Revenue <button class="btn btn-link btn-sm" @onclick="ToggleProviderSort">@((providerSortDesc) ? "▼" : "▲")</button></th>
+                                <th class="text-end">Count</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (int i = 0; i < providerStats.Count; i++)
+                            {
+                                var p = providerStats[i];
+                                <tr>
+                                    <td>@(i+1)</td>
+                                    <td>@p.Name</td>
+                                    <td class="text-end">@p.Total.ToString("C")</td>
+                                    <td class="text-end">@p.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private decimal dayTotal = 0m;
+    private decimal weekTotal = 0m;
+    private decimal monthTotal = 0m;
+
+    private string period = "day";
+
+    private List<Bucket> buckets = new();
+    private decimal maxBucketValue = 1m;
+    private bool hasData = false;
+
+    // breakdowns
+    private DateTime startDate = DateTime.UtcNow.Date.AddDays(-6);
+    private DateTime endDate = DateTime.UtcNow.Date;
+
+    private List<ItemStat>? serviceStats;
+    private List<ItemStat>? providerStats;
+    private bool serviceSortDesc = true;
+    private bool providerSortDesc = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTotalsAsync();
+        await LoadBucketsAsync();
+        await LoadBreakdownsAsync();
+    }
+
+    private async Task LoadTotalsAsync()
+    {
+        var now = DateTime.UtcNow;
+
+        dayTotal = await Db.Appointments
+            .Where(a => a.Status == "Completed" && a.StartTime.Date == now.Date)
+            .SumAsync(a => (decimal?)a.Price) ?? 0m;
+
+        var weekStart = now.Date.AddDays(-6);
+        weekTotal = await Db.Appointments
+            .Where(a => a.Status == "Completed" && a.StartTime.Date >= weekStart)
+            .SumAsync(a => (decimal?)a.Price) ?? 0m;
+
+        var monthStart = new DateTime(now.Year, now.Month, 1);
+        monthTotal = await Db.Appointments
+            .Where(a => a.Status == "Completed" && a.StartTime.Date >= monthStart)
+            .SumAsync(a => (decimal?)a.Price) ?? 0m;
+    }
+
+    private async Task LoadBucketsAsync()
+    {
+        buckets.Clear();
+        var now = DateTime.UtcNow;
+
+        if (period == "day")
+        {
+            var start = now.Date;
+            var end = start.AddDays(1);
+            var query = await Db.Appointments.Where(a => a.Status == "Completed" && a.StartTime >= start && a.StartTime < end).ToListAsync();
+            for (int h = 0; h < 24; h++)
+            {
+                var slotStart = start.AddHours(h);
+                var slotEnd = slotStart.AddHours(1);
+                var sum = query.Where(a => a.StartTime >= slotStart && a.StartTime < slotEnd).Sum(a => a.Price);
+                buckets.Add(new Bucket($"{h}", sum));
+            }
+        }
+        else if (period == "week")
+        {
+            var start = now.Date.AddDays(-6);
+            var query = await Db.Appointments.Where(a => a.Status == "Completed" && a.StartTime.Date >= start).ToListAsync();
+            for (int d = 0; d < 7; d++)
+            {
+                var day = start.AddDays(d);
+                var sum = query.Where(a => a.StartTime.Date == day.Date).Sum(a => a.Price);
+                buckets.Add(new Bucket(day.ToString("ddd"), sum));
+            }
+        }
+        else
+        {
+            var start = new DateTime(now.Year, now.Month, 1);
+            var days = DateTime.DaysInMonth(now.Year, now.Month);
+            var query = await Db.Appointments.Where(a => a.Status == "Completed" && a.StartTime.Date >= start).ToListAsync();
+            for (int d = 1; d <= days; d++)
+            {
+                var day = start.AddDays(d - 1);
+                var sum = query.Where(a => a.StartTime.Date == day.Date).Sum(a => a.Price);
+                buckets.Add(new Bucket(d.ToString(), sum));
+            }
+        }
+
+        maxBucketValue = buckets.Max(b => b.Value);
+        hasData = buckets.Any(b => b.Value > 0);
+    }
+
+    private async Task LoadBreakdownsAsync()
+    {
+        var start = startDate.Date;
+        var end = endDate.Date.AddDays(1);
+
+        // Services
+        var svcGroups = await Db.Appointments
+            .Where(a => a.Status == "Completed" && a.StartTime >= start && a.StartTime < end)
+            .GroupBy(a => a.ServiceId)
+            .Select(g => new { Id = g.Key, Total = g.Sum(a => a.Price), Count = g.Count() })
+            .ToListAsync();
+
+        var svcIds = svcGroups.Select(s => s.Id).ToList();
+        var services = await Db.Services.Where(s => svcIds.Contains(s.Id)).ToDictionaryAsync(s => s.Id, s => s.Name);
+
+        serviceStats = svcGroups.Select(g => new ItemStat { Id = g.Id, Name = services.GetValueOrDefault(g.Id, "(unknown)"), Total = g.Total, Count = g.Count })
+            .OrderByDescending(s => s.Total).ToList();
+
+        // Providers
+        var provGroups = await Db.Appointments
+            .Where(a => a.Status == "Completed" && a.ProviderId != null && a.StartTime >= start && a.StartTime < end)
+            .GroupBy(a => a.ProviderId)
+            .Select(g => new { Id = g.Key.Value, Total = g.Sum(a => a.Price), Count = g.Count() })
+            .ToListAsync();
+
+        var provIds = provGroups.Select(p => p.Id).ToList();
+        var users = await Db.Users.Where(u => provIds.Contains(u.Id)).ToDictionaryAsync(u => u.Id, u => u.FullName);
+
+        providerStats = provGroups.Select(g => new ItemStat { Id = g.Id, Name = users.GetValueOrDefault(g.Id, "(unknown)"), Total = g.Total, Count = g.Count })
+            .OrderByDescending(p => p.Total).ToList();
+
+        ApplySorting();
+    }
+
+    private void ApplySorting()
+    {
+        if (serviceStats is not null)
+        {
+            serviceStats = serviceSortDesc ? serviceStats.OrderByDescending(s => s.Total).ToList() : serviceStats.OrderBy(s => s.Total).ToList();
+        }
+        if (providerStats is not null)
+        {
+            providerStats = providerSortDesc ? providerStats.OrderByDescending(p => p.Total).ToList() : providerStats.OrderBy(p => p.Total).ToList();
+        }
+    }
+
+    private async Task ApplyRangeAsync()
+    {
+        await LoadBreakdownsAsync();
+    }
+
+    private void ToggleServiceSort()
+    {
+        serviceSortDesc = !serviceSortDesc;
+        ApplySorting();
+    }
+
+    private void ToggleProviderSort()
+    {
+        providerSortDesc = !providerSortDesc;
+        ApplySorting();
+    }
+
+    private async Task OnPeriodChanged(ChangeEventArgs e)
+    {
+        period = e.Value?.ToString() ?? "day";
+        await LoadBucketsAsync();
+    }
+
+    private record Bucket(string Label, decimal Value);
+
+    private class ItemStat
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public decimal Total { get; set; }
+        public int Count { get; set; }
+    }
+}

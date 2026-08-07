@@ -9,6 +9,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Service> Services => Set<Service>();
     public DbSet<ServicePricingTier> ServicePricingTiers => Set<ServicePricingTier>();
     public DbSet<ApprovalRequest> ApprovalRequests => Set<ApprovalRequest>();
+    public DbSet<Membership> Memberships => Set<Membership>();
     public DbSet<Appointment> Appointments => Set<Appointment>();
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();

@@ -1,0 +1,137 @@
+@page "/admin/memberships-report"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin,Manager")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<PageTitle>Membership Report</PageTitle>
+
+<h3>Membership & Retention Report</h3>
+
+<div class="d-flex gap-2 align-items-center mb-3">
+    <label class="m-0">From</label>
+    <InputDate @bind-Value="startDate" class="form-control form-control-sm w-auto" />
+    <label class="m-0">To</label>
+    <InputDate @bind-Value="endDate" class="form-control form-control-sm w-auto" />
+    <button class="btn btn-sm btn-primary" @onclick="ApplyRangeAsync">Apply</button>
+    <div class="ms-auto">
+        <strong>Total Active:</strong> @totalActive
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Renewal Rate</h5>
+                <p class="lead">@renewalRate:P1</p>
+                <div>Renewals in range: <strong>@renewalsCount</strong></div>
+                <div>Eligible for renewal: <strong>@eligibleForRenewal</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Churn Rate</h5>
+                <p class="lead text-danger">@churnRate:P1</p>
+                <div>Cancellations in range: <strong>@cancellationsCount</strong></div>
+                <div>Active at period start: <strong>@activeAtStart</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (!hasData)
+{
+    <div class="alert alert-secondary">No membership activity in the selected range.</div>
+}
+else
+{
+    <div class="card">
+        <div class="card-body">
+            <h5>Trend (memberships)</h5>
+            <div class="d-flex gap-2">
+                @foreach (var b in trendBuckets)
+                {
+                    <div class="text-center" style="width:40px">
+                        <div style="height:@(b.Value == 0 ? 8 : b.Value / maxTrend * 100)% ; background:#2E7D6B; width:100%"></div>
+                        <div class="small mt-1">@b.Label</div>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateTime startDate = DateTime.UtcNow.Date.AddMonths(-1);
+    private DateTime endDate = DateTime.UtcNow.Date;
+
+    private int totalActive;
+
+    private int renewalsCount;
+    private int eligibleForRenewal;
+    private double renewalRate;
+
+    private int cancellationsCount;
+    private int activeAtStart;
+    private double churnRate;
+
+    private bool hasData = false;
+
+    private List<Bucket> trendBuckets = new();
+    private decimal maxTrend = 1m;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CalculateAsync();
+    }
+
+    private async Task ApplyRangeAsync()
+    {
+        await CalculateAsync();
+    }
+
+    private async Task CalculateAsync()
+    {
+        // total active currently
+        totalActive = await Db.Memberships.CountAsync(m => m.IsActive);
+
+        // renewals: memberships with LastRenewedDate in range
+        renewalsCount = await Db.Memberships.CountAsync(m => m.LastRenewedDate >= startDate && m.LastRenewedDate <= endDate);
+
+        // eligible for renewal: memberships whose EndDate falls in range
+        eligibleForRenewal = await Db.Memberships.CountAsync(m => m.EndDate >= startDate && m.EndDate <= endDate);
+
+        renewalRate = eligibleForRenewal == 0 ? 0 : (double)renewalsCount / eligibleForRenewal;
+
+        // cancellations: memberships that became inactive in range (IsActive false and EndDate in range)
+        cancellationsCount = await Db.Memberships.CountAsync(m => m.IsActive == false && m.EndDate >= startDate && m.EndDate <= endDate);
+
+        // active at period start: memberships that were active just before startDate
+        activeAtStart = await Db.Memberships.CountAsync(m => m.StartDate < startDate && (m.EndDate == null || m.EndDate >= startDate));
+
+        churnRate = activeAtStart == 0 ? 0 : (double)cancellationsCount / activeAtStart;
+
+        // Trend: daily counts of active memberships in range
+        trendBuckets.Clear();
+        var days = (endDate - startDate).Days + 1;
+        var counts = new List<int>();
+        for (int i = 0; i < days; i++)
+        {
+            var d = startDate.AddDays(i);
+            var cnt = await Db.Memberships.CountAsync(m => m.StartDate <= d && (m.EndDate == null || m.EndDate >= d));
+            counts.Add(cnt);
+            trendBuckets.Add(new Bucket(d.ToString("MM/dd"), cnt));
+        }
+        maxTrend = counts.Count > 0 ? Math.Max(1, counts.Max()) : 1;
+
+        hasData = renewalsCount > 0 || cancellationsCount > 0 || counts.Any(c => c > 0);
+    }
+
+    private record Bucket(string Label, int Value);
+}

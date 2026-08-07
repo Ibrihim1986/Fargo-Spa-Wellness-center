@@ -40,6 +40,7 @@ public static class AccountAuthEndpoints
             var redirectUrl = user.Role switch
             {
                 "Admin" => "/admin",
+                "Manager" => "/admin",
                 "Provider" => "/dashboard",
                 _ => "/dashboard",
             };
