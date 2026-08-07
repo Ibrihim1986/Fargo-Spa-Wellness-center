@@ -1,0 +1,117 @@
+@page "/admin/operational-reports"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin,Manager")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Operational Reports</PageTitle>
+
+<h3>Operational Reports</h3>
+
+<div class="d-flex gap-2 align-items-center mb-3">
+    <label class="m-0">From</label>
+    <InputDate @bind-Value="startDate" class="form-control form-control-sm w-auto" />
+    <label class="m-0">To</label>
+    <InputDate @bind-Value="endDate" class="form-control form-control-sm w-auto" />
+    <button class="btn btn-sm btn-primary" @onclick="Generate">Generate</button>
+    <div class="btn-group ms-3">
+        <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportCsv">Export CSV</a>
+        <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportPdf">Export PDF</a>
+    </div>
+</div>
+
+@if (!hasData)
+{
+    <div class="alert alert-secondary">No appointment data for the selected range.</div>
+}
+else
+{
+    <div class="row">
+        <div class="col-md-4">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Totals</h5>
+                    <div>Total appointments: <strong>@total</strong></div>
+                    <div>Completed: <strong>@completed</strong></div>
+                    <div>Cancelled: <strong>@cancelled</strong></div>
+                    <div>No-shows: <strong>@noshow</strong></div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-8">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5>Daily Breakdown</h5>
+                    <div class="d-flex gap-2">
+                        @foreach (var b in daily)
+                        {
+                            <div class="text-center" style="width:50px">
+                                <div style="height:@(b.Total==0?8:b.Total/maxDaily*100)% ; background:#4a90e2; width:100%"></div>
+                                <div class="small">@b.Label</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private DateTime startDate = DateTime.UtcNow.Date.AddDays(-6);
+    private DateTime endDate = DateTime.UtcNow.Date;
+
+    private int total;
+    private int completed;
+    private int cancelled;
+    private int noshow;
+
+    private bool hasData = false;
+
+    private List<DayBucket> daily = new();
+    private decimal maxDaily = 1m;
+
+    private async Task Generate()
+    {
+        var start = startDate.Date;
+        var end = endDate.Date.AddDays(1);
+        var appts = await Db.Appointments.Where(a => a.StartTime >= start && a.StartTime < end).ToListAsync();
+
+        total = appts.Count;
+        completed = appts.Count(a => a.Status == "Completed");
+        cancelled = appts.Count(a => a.Status == "Cancelled");
+        noshow = appts.Count(a => a.Status == "NoShow");
+
+        daily.Clear();
+        var days = (end.Date - start.Date).Days + 1;
+        var counts = new List<int>();
+        for (int i = 0; i < days; i++)
+        {
+            var d = start.AddDays(i);
+            var cnt = appts.Count(a => a.StartTime.Date == d.Date);
+            daily.Add(new DayBucket(d.ToString("MM/dd"), cnt));
+            counts.Add(cnt);
+        }
+        maxDaily = counts.Count > 0 ? Math.Max(1, counts.Max()) : 1;
+        hasData = total > 0;
+    }
+
+    private void ExportCsv()
+    {
+        var url = $"/admin/export?report=operational&format=csv&start={startDate:O}&end={endDate:O}";
+        NavigationManager.NavigateTo(url, true);
+    }
+
+    private async Task ExportPdf()
+    {
+        var url = $"/admin/export?report=operational&format=print&start={startDate:O}&end={endDate:O}";
+        await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private record DayBucket(string Label, int Total);
+}

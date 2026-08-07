@@ -6,6 +6,8 @@
 @using Family_and_Spa_Wellness.Models
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Membership Report</PageTitle>
 
@@ -19,6 +21,12 @@
     <button class="btn btn-sm btn-primary" @onclick="ApplyRangeAsync">Apply</button>
     <div class="ms-auto">
         <strong>Total Active:</strong> @totalActive
+    </div>
+</div>
+<div class="mb-2">
+    <div class="btn-group">
+        <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportCsv">Export CSV</a>
+        <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportPdf">Export PDF</a>
     </div>
 </div>
 
@@ -94,6 +102,18 @@ else
     private async Task ApplyRangeAsync()
     {
         await CalculateAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        var url = $"/admin/export?report=memberships&format=csv&start={startDate:O}&end={endDate:O}";
+        NavigationManager.NavigateTo(url, true);
+    }
+
+    private async Task ExportPdf()
+    {
+        var url = $"/admin/export?report=memberships&format=print&start={startDate:O}&end={endDate:O}";
+        await JSRuntime.InvokeVoidAsync("open", url, "_blank");
     }
 
     private async Task CalculateAsync()

@@ -6,6 +6,8 @@
 @using Family_and_Spa_Wellness.Models
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
 
 <PageTitle>Revenue Dashboard - Admin</PageTitle>
 
@@ -25,6 +27,10 @@
             <option value="week">Week (days)</option>
             <option value="month">Month (days)</option>
         </select>
+        <div class="btn-group ms-3">
+            <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportCsv">Export CSV</a>
+            <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportPdf">Export PDF</a>
+        </div>
     </div>
 </div>
 
@@ -293,6 +299,23 @@
     {
         period = e.Value?.ToString() ?? "day";
         await LoadBucketsAsync();
+    }
+
+    private async Task ExportCsv()
+    {
+        var start = startDate.Date;
+        var end = endDate.Date.AddDays(1);
+        var url = $"/admin/export?report=revenue&format=csv&start={start:O}&end={end:O}";
+        NavigationManager.NavigateTo(url, true);
+    }
+
+    private async Task ExportPdf()
+    {
+        var start = startDate.Date;
+        var end = endDate.Date.AddDays(1);
+        var url = $"/admin/export?report=revenue&format=print&start={start:O}&end={end:O}";
+        // open new tab for printable view
+        await JSRuntime.InvokeVoidAsync("open", url, "_blank");
     }
 
     private record Bucket(string Label, decimal Value);
