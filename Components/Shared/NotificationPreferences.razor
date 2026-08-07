@@ -1,9 +1,75 @@
-@((MarkupString)"<!-- US-705: Booking confirmation notices -->")
-@((MarkupString)"<!-- US-714: Appointment reminder and change/cancellation notices -->")
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-705: Booking confirmation notices -->
+<!-- US-714: Appointment reminder and change/cancellation notices -->
 <div class="card">
     <div class="card-body">
         <h2>Notification Preferences</h2>
-        <p>Coming soon: manage how you receive booking confirmations, reminders, and cancellation notices.</p>
+        <p class="text-sage">Choose how you'd like to receive booking confirmations, reminders, and cancellation notices.</p>
+
+        @if (currentUser is null)
+        {
+            <p>Loading...</p>
+        }
+        else
+        {
+            @if (saved)
+            {
+                <div class="alert alert-success">Preferences saved.</div>
+            }
+
+            <div class="mb-3">
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="channel" id="channelEmail"
+                           checked="@(channel == "Email")" @onchange='() => channel = "Email"' />
+                    <label class="form-check-label" for="channelEmail">Email only</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="channel" id="channelSms"
+                           checked="@(channel == "SMS")" @onchange='() => channel = "SMS"' />
+                    <label class="form-check-label" for="channelSms">SMS only</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="radio" name="channel" id="channelBoth"
+                           checked="@(channel == "Both")" @onchange='() => channel = "Both"' />
+                    <label class="form-check-label" for="channelBoth">Both email and SMS</label>
+                </div>
+            </div>
+
+            <button class="btn btn-primary" @onclick="Save">Save Preferences</button>
+        }
     </div>
 </div>
+
+@code {
+    private Models.User? currentUser;
+    private string channel = "Email";
+    private bool saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (idClaim is null || !int.TryParse(idClaim, out var userId)) return;
+
+        currentUser = await Db.Users.FindAsync(userId);
+        if (currentUser is not null)
+        {
+            channel = currentUser.NotificationChannel;
+        }
+    }
+
+    private async Task Save()
+    {
+        if (currentUser is null) return;
+
+        currentUser.NotificationChannel = channel;
+        Db.Users.Update(currentUser);
+        await Db.SaveChangesAsync();
+        saved = true;
+    }
+}
