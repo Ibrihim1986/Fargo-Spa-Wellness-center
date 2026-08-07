@@ -1,7 +1,198 @@
 @page "/gift-cards"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject IPaymentProvider PaymentProvider
+@inject IEmailSender EmailSender
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-710: Purchase or redeem a gift card -->
 <PageTitle>Gift Cards - Fargo Spa and Wellness</PageTitle>
 
 <h1>Gift Cards</h1>
-<p>Coming soon: purchase or redeem a Fargo Spa and Wellness gift card.</p>
-@((MarkupString)"<!-- US-710: Purchase or redeem a gift card -->")
+<p class="text-sage">Give (or treat yourself to) the gift of relaxation.</p>
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Purchase a Gift Card</h5>
+
+                @if (purchaseError is not null)
+                {
+                    <div class="alert alert-danger">@purchaseError</div>
+                }
+                @if (purchasedCard is not null)
+                {
+                    <div class="alert alert-success">
+                        Your gift card code (<strong>@purchasedCard.Code</strong>) has been emailed to
+                        @(string.IsNullOrWhiteSpace(purchasedCard.RecipientEmail) ? "you" : purchasedCard.RecipientEmail).
+                    </div>
+                }
+
+                <div class="btn-group mb-3" role="group">
+                    @foreach (var denom in Denominations)
+                    {
+                        <button class="btn @(selectedAmount == denom ? "btn-primary" : "btn-outline-primary")" @onclick="() => selectedAmount = denom">
+                            @denom.ToString("C0")
+                        </button>
+                    }
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Or enter a custom amount</label>
+                    <input type="number" min="5" step="1" class="form-control" @bind="selectedAmount" />
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Recipient email (leave blank to send to yourself)</label>
+                    <input class="form-control" @bind="recipientEmail" />
+                </div>
+
+                <button class="btn btn-primary" @onclick="PurchaseGiftCard" disabled="@isPurchasing">
+                    @(isPurchasing ? "Processing..." : $"Purchase {selectedAmount:C0} Gift Card")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Check Balance / Redeem</h5>
+
+                @if (balanceError is not null)
+                {
+                    <div class="alert alert-danger">@balanceError</div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Gift card code</label>
+                    <input class="form-control" @bind="checkCode" />
+                </div>
+                <button class="btn btn-outline-primary mb-3" @onclick="CheckBalance">Check Balance</button>
+
+                @if (lookedUpCard is not null)
+                {
+                    <p><strong>Current balance:</strong> @lookedUpCard.CurrentBalance.ToString("C")</p>
+
+                    @if (lookedUpCard.CurrentBalance <= 0)
+                    {
+                        <div class="alert alert-warning">This gift card has already been fully redeemed.</div>
+                    }
+                    else
+                    {
+                        <p class="text-sage small">
+                            Enter this code at checkout to apply the balance toward your purchase total.
+                            If your total is more than the card balance, the remaining amount will be charged
+                            to your selected payment method.
+                        </p>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly decimal[] Denominations = [25, 50, 100, 150];
+
+    private User? currentUser;
+    private decimal selectedAmount = 50;
+    private string recipientEmail = "";
+    private bool isPurchasing;
+    private string? purchaseError;
+    private GiftCard? purchasedCard;
+
+    private string checkCode = "";
+    private GiftCard? lookedUpCard;
+    private string? balanceError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (idClaim is not null && int.TryParse(idClaim, out var userId))
+        {
+            currentUser = await Db.Users.FindAsync(userId);
+        }
+    }
+
+    private async Task PurchaseGiftCard()
+    {
+        purchaseError = null;
+        purchasedCard = null;
+
+        if (selectedAmount <= 0)
+        {
+            purchaseError = "Please choose or enter a gift card amount greater than zero.";
+            return;
+        }
+
+        isPurchasing = true;
+        try
+        {
+            // Placeholder charge until a real payment element is wired up (see US-901).
+            await PaymentProvider.ChargeAsync(selectedAmount, "USD", "checkout-card-entry");
+
+            var card = new GiftCard
+            {
+                Code = GenerateCode(),
+                InitialBalance = selectedAmount,
+                CurrentBalance = selectedAmount,
+                PurchaserEmail = currentUser?.Email,
+                RecipientEmail = string.IsNullOrWhiteSpace(recipientEmail) ? null : recipientEmail.Trim(),
+                IssuedAt = DateTime.UtcNow
+            };
+            Db.GiftCards.Add(card);
+            await Db.SaveChangesAsync();
+
+            var deliverTo = card.RecipientEmail ?? card.PurchaserEmail;
+            if (!string.IsNullOrWhiteSpace(deliverTo))
+            {
+                try
+                {
+                    await EmailSender.SendEmailAsync(deliverTo, "Your Fargo Spa and Wellness Gift Card",
+                        $"You've received a Fargo Spa and Wellness gift card!\nCode: {card.Code}\nBalance: {card.CurrentBalance:C}");
+                }
+                catch
+                {
+                    // Email is best-effort; the card is still valid even if delivery fails.
+                }
+            }
+
+            purchasedCard = card;
+        }
+        catch (Exception ex)
+        {
+            purchaseError = $"Payment could not be processed: {ex.Message}";
+        }
+        finally
+        {
+            isPurchasing = false;
+        }
+    }
+
+    private async Task CheckBalance()
+    {
+        balanceError = null;
+        lookedUpCard = await Db.GiftCards.FirstOrDefaultAsync(g => g.Code == checkCode.Trim());
+        if (lookedUpCard is null)
+        {
+            balanceError = "Gift card code not found.";
+        }
+    }
+
+    private static string GenerateCode()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var rnd = Random.Shared;
+        return string.Concat(Enumerable.Range(0, 12).Select(i =>
+            (i > 0 && i % 4 == 0 ? "-" : "") + chars[rnd.Next(chars.Length)]));
+    }
+}

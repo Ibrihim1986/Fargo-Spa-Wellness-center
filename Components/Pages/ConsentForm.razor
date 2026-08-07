@@ -1,15 +1,317 @@
 @page "/consent-form"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-708: Review and sign required waivers/consent forms -->
+<!-- US-713: Guardian completes a consent form for a minor -->
 <PageTitle>Consent Form - Fargo Spa and Wellness</PageTitle>
 
 <h1>Consent Form</h1>
-<p>Coming soon: review and sign required waivers and consent forms.</p>
-@((MarkupString)"<!-- US-708: Review and sign required waivers/consent forms -->")
-@((MarkupString)"<!-- US-713: Guardian completes a consent form for a minor -->")
 
-<div class="form-check mt-3">
-    <input class="form-check-input" type="checkbox" disabled id="guardianToggle" />
-    <label class="form-check-label" for="guardianToggle">
-        I am a parent/guardian completing this form on behalf of a minor
-    </label>
-</div>
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="form-check mt-3 mb-4">
+        <input class="form-check-input" type="checkbox" id="guardianToggle" @bind="isGuardianMode" />
+        <label class="form-check-label" for="guardianToggle">
+            I am a parent/guardian completing this form on behalf of a minor
+        </label>
+    </div>
+
+    @if (!isGuardianMode)
+    {
+        <!-- US-708: my own waiver / health disclosure -->
+        <div class="card">
+            <div class="card-body">
+                <h4>My Health & Waiver Form</h4>
+
+                @if (myWaiver is { IsSigned: true } && !myWaiver.IsExpired)
+                {
+                    <div class="alert alert-success">
+                        Already signed on @myWaiver.SignedAt!.Value.ToString("MMM d, yyyy") — valid until @myWaiver.ExpiresAt?.ToString("MMM d, yyyy").
+                        No further action needed for this form.
+                    </div>
+                }
+                else
+                {
+                    @if (myWaiver is { IsExpired: true })
+                    {
+                        <div class="alert alert-warning">Your previous waiver has expired. Please review and sign again.</div>
+                    }
+
+                    <p>
+                        By signing below, I acknowledge I have read and agree to the Fargo Spa and Wellness
+                        liability waiver, cancellation policy, and health disclosure requirements. I confirm
+                        the information I provide below is accurate to the best of my knowledge.
+                    </p>
+
+                    <div class="mb-3">
+                        <label class="form-label">Allergies (if any)</label>
+                        <textarea class="form-control" rows="2" @bind="allergies"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Medical conditions we should know about (if any)</label>
+                        <textarea class="form-control" rows="2" @bind="medicalConditions"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type your full name as your electronic signature</label>
+                        <input class="form-control" @bind="signatureName" placeholder="@currentUser.FullName" />
+                    </div>
+
+                    <button class="btn btn-primary" @onclick="SignMyWaiver">Submit Signature</button>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- US-713: guardian consent for a minor child -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <h4>Add or Select a Child</h4>
+
+                @if (dependents.Any())
+                {
+                    <div class="mb-3">
+                        <select class="form-select" @bind="selectedDependentId">
+                            <option value="">Select a child...</option>
+                            @foreach (var dep in dependents)
+                            {
+                                <option value="@dep.Id">@dep.FirstName @dep.LastName (age @dep.AgeYears)</option>
+                            }
+                            <option value="new">+ Add a new child</option>
+                        </select>
+                    </div>
+                }
+
+                @if (!dependents.Any() || selectedDependentId == "new")
+                {
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-4">
+                            <input class="form-control" placeholder="Child's first name" @bind="newDependentFirstName" />
+                        </div>
+                        <div class="col-md-4">
+                            <input class="form-control" placeholder="Child's last name" @bind="newDependentLastName" />
+                        </div>
+                        <div class="col-md-4">
+                            <input type="date" class="form-control" @bind="newDependentDob" @bind:format="yyyy-MM-dd" />
+                        </div>
+                    </div>
+                    <button class="btn btn-outline-primary mb-3" @onclick="AddDependent">Save Child</button>
+                }
+            </div>
+        </div>
+
+        @if (activeDependent is not null)
+        {
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h4>Consent for @activeDependent.FirstName @activeDependent.LastName</h4>
+
+                    <div class="mb-3">
+                        <label class="form-label">Service</label>
+                        <select class="form-select" @bind="selectedServiceId">
+                            <option value="">Select a service...</option>
+                            @foreach (var svc in services)
+                            {
+                                <option value="@svc.Id">@svc.Name @(svc.MinimumAge.HasValue ? $"(min age {svc.MinimumAge})" : "")</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (ageBlocked)
+                    {
+                        <div class="alert alert-danger">
+                            @activeDependent.FirstName is @activeDependent.AgeYears years old, which is below the minimum
+                            age of @selectedService?.MinimumAge for this service. This service cannot be booked for them.
+                        </div>
+                    }
+                    else if (selectedService is not null)
+                    {
+                        @if (existingConsent is not null)
+                        {
+                            <div class="alert alert-info">
+                                You previously signed consent for @activeDependent.FirstName for this service on
+                                @existingConsent.SignedAt.ToString("MMM d, yyyy"). You can confirm it's still current, or update it below.
+                            </div>
+                        }
+
+                        <p>
+                            I, the undersigned parent/legal guardian, authorize @activeDependent.FirstName @activeDependent.LastName
+                            to receive the <strong>@selectedService.Name</strong> service at Fargo Spa and Wellness. I confirm I have
+                            legal authority to consent to this treatment on the minor's behalf and accept the associated liability waiver.
+                        </p>
+
+                        <div class="mb-3">
+                            <label class="form-label">Type your full name as your electronic signature</label>
+                            <input class="form-control" @bind="guardianSignatureName" placeholder="@currentUser.FullName" />
+                        </div>
+
+                        <button class="btn btn-primary" @onclick="SignGuardianConsent">
+                            @(existingConsent is null ? "Submit Consent" : "Update Consent")
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    }
+
+    @if (statusMessage is not null)
+    {
+        <div class="alert alert-success mt-3">@statusMessage</div>
+    }
+}
+
+@code {
+    private User? currentUser;
+    private bool isGuardianMode;
+
+    // US-708 state
+    private Waiver? myWaiver;
+    private string? allergies;
+    private string? medicalConditions;
+    private string signatureName = "";
+
+    // US-713 state
+    private List<Dependent> dependents = [];
+    private string selectedDependentId = "";
+    private Dependent? activeDependent;
+    private string newDependentFirstName = "";
+    private string newDependentLastName = "";
+    private DateTime newDependentDob = DateTime.Today.AddYears(-8);
+
+    private List<Service> services = [];
+    private string selectedServiceId = "";
+    private Service? selectedService;
+    private GuardianConsent? existingConsent;
+    private string guardianSignatureName = "";
+
+    private string? statusMessage;
+
+    private bool ageBlocked =>
+        selectedService?.MinimumAge is int minAge && activeDependent is not null && activeDependent.AgeYears < minAge;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (idClaim is null || !int.TryParse(idClaim, out var userId)) return;
+
+        currentUser = await Db.Users.FindAsync(userId);
+        if (currentUser is null) return;
+
+        myWaiver = await Db.Waivers.FirstOrDefaultAsync(w => w.ClientId == currentUser.Id);
+        signatureName = currentUser.FullName;
+        guardianSignatureName = currentUser.FullName;
+
+        dependents = await Db.Dependents.Where(d => d.GuardianUserId == currentUser.Id).ToListAsync();
+        services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+    }
+
+    private async Task SignMyWaiver()
+    {
+        if (currentUser is null) return;
+
+        myWaiver ??= new Waiver { ClientId = currentUser.Id };
+        myWaiver.SignedAt = DateTime.UtcNow;
+        myWaiver.ExpiresAt = DateTime.UtcNow.AddYears(1);
+        myWaiver.Allergies = allergies;
+        myWaiver.MedicalConditions = medicalConditions;
+
+        if (myWaiver.Id == 0)
+        {
+            Db.Waivers.Add(myWaiver);
+        }
+        else
+        {
+            Db.Waivers.Update(myWaiver);
+        }
+
+        await Db.SaveChangesAsync();
+        statusMessage = "Your waiver has been signed and recorded.";
+    }
+
+    private async Task AddDependent()
+    {
+        if (currentUser is null) return;
+        if (string.IsNullOrWhiteSpace(newDependentFirstName) || string.IsNullOrWhiteSpace(newDependentLastName)) return;
+
+        var dependent = new Dependent
+        {
+            GuardianUserId = currentUser.Id,
+            FirstName = newDependentFirstName.Trim(),
+            LastName = newDependentLastName.Trim(),
+            DateOfBirth = DateOnly.FromDateTime(newDependentDob)
+        };
+        Db.Dependents.Add(dependent);
+        await Db.SaveChangesAsync();
+
+        dependents.Add(dependent);
+        selectedDependentId = dependent.Id.ToString();
+        activeDependent = dependent;
+        newDependentFirstName = "";
+        newDependentLastName = "";
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (int.TryParse(selectedDependentId, out var depId))
+        {
+            activeDependent = dependents.FirstOrDefault(d => d.Id == depId);
+        }
+
+        if (int.TryParse(selectedServiceId, out var svcId))
+        {
+            selectedService = services.FirstOrDefault(s => s.Id == svcId);
+            if (activeDependent is not null && selectedService is not null && currentUser is not null)
+            {
+                existingConsent = await Db.GuardianConsents
+                    .Where(c => c.DependentId == activeDependent.Id && c.ServiceId == selectedService.Id)
+                    .OrderByDescending(c => c.SignedAt)
+                    .FirstOrDefaultAsync();
+            }
+        }
+        else
+        {
+            selectedService = null;
+            existingConsent = null;
+        }
+    }
+
+    private async Task SignGuardianConsent()
+    {
+        if (currentUser is null || activeDependent is null || selectedService is null || ageBlocked) return;
+
+        var consent = existingConsent ?? new GuardianConsent
+        {
+            DependentId = activeDependent.Id,
+            GuardianUserId = currentUser.Id,
+            ServiceId = selectedService.Id
+        };
+
+        consent.GuardianSignatureName = string.IsNullOrWhiteSpace(guardianSignatureName) ? currentUser.FullName : guardianSignatureName;
+        consent.SignedAt = DateTime.UtcNow;
+
+        if (consent.Id == 0)
+        {
+            Db.GuardianConsents.Add(consent);
+        }
+        else
+        {
+            Db.GuardianConsents.Update(consent);
+        }
+
+        await Db.SaveChangesAsync();
+        existingConsent = consent;
+        statusMessage = $"Consent for {activeDependent.FirstName} recorded for {selectedService.Name}.";
+    }
+}

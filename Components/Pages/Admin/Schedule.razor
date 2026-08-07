@@ -1,0 +1,112 @@
+@page "/admin/schedule"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<!-- US-302: Receptionist views the day's full schedule across all providers -->
+<PageTitle>Schedule - Admin</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h1>Full Schedule</h1>
+        <p class="text-sage">All providers' appointments for the selected day.</p>
+    </div>
+    <div>
+        <input type="date" class="form-control" @bind="selectedDate" @bind:format="yyyy-MM-dd" @bind:after="LoadDayAsync" />
+    </div>
+</div>
+
+@if (appointmentsByProvider is null)
+{
+    <p>Loading...</p>
+}
+else if (!appointmentsByProvider.Any())
+{
+    <p class="text-sage">No providers with appointments today.</p>
+}
+else
+{
+    <div class="row g-3">
+        @foreach (var providerGroup in appointmentsByProvider)
+        {
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100">
+                    <div class="card-header fw-semibold">
+                        @providerGroup.Provider?.FullName
+                        <span class="text-sage small">(@providerGroup.Rows.Count)</span>
+                    </div>
+                    <div class="card-body d-flex flex-column gap-2">
+                        @if (!providerGroup.Rows.Any())
+                        {
+                            <p class="text-sage small mb-0">No appointments.</p>
+                        }
+                        @foreach (var row in providerGroup.Rows.OrderBy(r => r.Appointment.StartTime))
+                        {
+                            <div class="border rounded p-2 schedule-slot" style="cursor:pointer;" @onclick="() => ToggleDetails(row.Appointment.Id)">
+                                <div class="d-flex justify-content-between">
+                                    <span class="fw-semibold">@row.Appointment.StartTime.ToString("h:mm tt")</span>
+                                    <span class="status-badge status-@row.Appointment.Status.ToLower()">@row.Appointment.Status</span>
+                                </div>
+                                <div class="small text-sage">@row.Client?.FullName</div>
+
+                                @if (expandedAppointmentId == row.Appointment.Id)
+                                {
+                                    <div class="mt-2 small border-top pt-2">
+                                        <div><strong>Client:</strong> @row.Client?.FullName</div>
+                                        <div><strong>Service:</strong> @row.Service?.Name</div>
+                                        <div><strong>Duration:</strong> @row.Service?.DurationMinutes min</div>
+                                        <div><strong>Time:</strong> @row.Appointment.StartTime.ToString("h:mm tt") – @row.Appointment.EndTime.ToString("h:mm tt")</div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private DateTime selectedDate = DateTime.Today;
+    private List<ProviderGroup>? appointmentsByProvider;
+    private int? expandedAppointmentId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDayAsync();
+    }
+
+    private async Task LoadDayAsync()
+    {
+        var users = await Db.Users.ToDictionaryAsync(u => u.Id);
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+
+        var dayAppointments = await Db.Appointments
+            .Where(a => a.StartTime.Date == selectedDate.Date && a.ProviderId != null)
+            .ToListAsync();
+
+        appointmentsByProvider = users.Values
+            .Where(u => u.Role == "Provider")
+            .OrderBy(u => u.FullName)
+            .Select(p => new ProviderGroup(
+                p,
+                dayAppointments
+                    .Where(a => a.ProviderId == p.Id)
+                    .Select(a => new BookingRow(a, users.GetValueOrDefault(a.ClientId), services.GetValueOrDefault(a.ServiceId)))
+                    .ToList()))
+            .ToList();
+    }
+
+    private void ToggleDetails(int appointmentId)
+    {
+        expandedAppointmentId = expandedAppointmentId == appointmentId ? null : appointmentId;
+    }
+
+    private record ProviderGroup(User? Provider, List<BookingRow> Rows);
+    private record BookingRow(Appointment Appointment, User? Client, Service? Service);
+}

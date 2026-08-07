@@ -1,9 +1,202 @@
 @page "/admin/fees"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
 @attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-305: Apply late-cancellation or no-show fees -->
 <PageTitle>Fees - Admin</PageTitle>
 
 <h1>Fees</h1>
-<p>Coming soon: apply late-cancellation or no-show fees.</p>
-@((MarkupString)"<!-- US-305: Apply late-cancellation or no-show fees -->")
+<p class="text-sage">
+    Late-cancellation fee: @(LateCancellationFeePercent * 100)% of service price if cancelled within @LateCancellationWindowHours hours of the appointment.
+    No-show fee: @(NoShowFeePercent * 100)% of service price.
+</p>
+
+<h4 class="mt-4">Appointments Eligible for a Fee</h4>
+@if (eligibleAppointments is null)
+{
+    <p>Loading...</p>
+}
+else if (!eligibleAppointments.Any())
+{
+    <p class="text-sage">No cancelled or no-show appointments currently need a fee applied.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Appointment Time</th>
+                <th>Reason</th>
+                <th>Fee</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in eligibleAppointments)
+            {
+                <tr>
+                    <td>@row.Client?.FullName</td>
+                    <td>@row.Service?.Name</td>
+                    <td>@row.Appointment.StartTime.ToString("MMM d, h:mm tt")</td>
+                    <td>@row.Reason</td>
+                    <td>@row.FeeAmount.ToString("C")</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="() => ApplyFee(row)">Apply Fee</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<h4 class="mt-5">Fees on Client Accounts</h4>
+@if (fees is null)
+{
+    <p>Loading...</p>
+}
+else if (!fees.Any())
+{
+    <p class="text-sage">No fees recorded yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Client</th>
+                <th>Reason</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Waived By</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var fee in fees)
+            {
+                <tr>
+                    <td>@users.GetValueOrDefault(fee.ClientId)?.FullName</td>
+                    <td>@fee.Reason</td>
+                    <td>@fee.Amount.ToString("C")</td>
+                    <td><span class="status-badge">@fee.Status</span></td>
+                    <td>@fee.WaivedByName</td>
+                    <td>
+                        @if (fee.Status == "Pending")
+                        {
+                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => WaiveFee(fee)">Waive</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    // US-305: simple, adjustable fee policy — flat percentages of the service price.
+    private const decimal LateCancellationFeePercent = 0.5m;
+    private const decimal NoShowFeePercent = 1.0m;
+    private const int LateCancellationWindowHours = 24;
+
+    private Dictionary<int, User> users = [];
+    private List<EligibleRow>? eligibleAppointments;
+    private List<Fee>? fees;
+    private string currentManagerName = "Admin";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        currentManagerName = authState.User.FindFirst(ClaimTypes.Email)?.Value
+            ?? authState.User.Identity?.Name
+            ?? "Admin";
+
+        users = await Db.Users.ToDictionaryAsync(u => u.Id);
+        await LoadEligibleAsync();
+        await LoadFeesAsync();
+    }
+
+    private async Task LoadEligibleAsync()
+    {
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+        var existingFeeAppointmentIds = await Db.Fees
+            .Where(f => f.AppointmentId != null)
+            .Select(f => f.AppointmentId!.Value)
+            .ToListAsync();
+
+        var candidates = await Db.Appointments
+            .Where(a => (a.Status == "Cancelled" || a.Status == "NoShow") && !existingFeeAppointmentIds.Contains(a.Id))
+            .ToListAsync();
+
+        eligibleAppointments = candidates.Select(a =>
+        {
+            var service = services.GetValueOrDefault(a.ServiceId);
+            var client = users.GetValueOrDefault(a.ClientId);
+
+            string reason;
+            decimal feeAmount;
+
+            if (a.Status == "NoShow")
+            {
+                reason = "No-show";
+                feeAmount = Math.Round((service?.Price ?? 0) * NoShowFeePercent, 2);
+            }
+            else
+            {
+                var withinWindow = (a.StartTime - a.CreatedAt) < TimeSpan.FromHours(LateCancellationWindowHours)
+                    || DateTime.UtcNow > a.StartTime.AddHours(-LateCancellationWindowHours);
+                reason = withinWindow ? "Late cancellation" : "Cancelled (outside window — no fee due)";
+                feeAmount = withinWindow ? Math.Round((service?.Price ?? 0) * LateCancellationFeePercent, 2) : 0;
+            }
+
+            return new EligibleRow(a, client, service, reason, feeAmount);
+        })
+        .Where(r => r.FeeAmount > 0)
+        .OrderBy(r => r.Appointment.StartTime)
+        .ToList();
+    }
+
+    private async Task LoadFeesAsync()
+    {
+        fees = await Db.Fees.OrderByDescending(f => f.CreatedAt).ToListAsync();
+    }
+
+    private async Task ApplyFee(EligibleRow row)
+    {
+        var fee = new Fee
+        {
+            ClientId = row.Client?.Id ?? row.Appointment.ClientId,
+            AppointmentId = row.Appointment.Id,
+            Amount = row.FeeAmount,
+            Reason = row.Reason,
+            Status = "Pending",
+            CreatedAt = DateTime.UtcNow
+        };
+        Db.Fees.Add(fee);
+        await Db.SaveChangesAsync();
+
+        await LoadEligibleAsync();
+        await LoadFeesAsync();
+    }
+
+    private async Task WaiveFee(Fee fee)
+    {
+        // US-305: waiver is recorded with the approving manager's name.
+        fee.Status = "Waived";
+        fee.WaivedByName = currentManagerName;
+        fee.WaivedAt = DateTime.UtcNow;
+        Db.Fees.Update(fee);
+        await Db.SaveChangesAsync();
+        await LoadFeesAsync();
+    }
+
+    private record EligibleRow(Appointment Appointment, User? Client, Service? Service, string Reason, decimal FeeAmount);
+}

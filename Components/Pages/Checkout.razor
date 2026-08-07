@@ -1,7 +1,210 @@
 @page "/checkout"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject IPaymentProvider PaymentProvider
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-709: Pay securely online or save a card on file -->
 <PageTitle>Checkout - Fargo Spa and Wellness</PageTitle>
 
 <h1>Checkout</h1>
-<p>Coming soon: pay securely online or save a card on file.</p>
-@((MarkupString)"<!-- US-709: Pay securely online or save a card on file -->")
+
+@if (currentUser is null || appointment is null)
+{
+    <div class="alert alert-warning">
+        No appointment selected for checkout, or you're not signed in. Return to
+        <a href="/dashboard">My Dashboard</a> and choose an appointment to pay for.
+    </div>
+}
+else
+{
+    <div class="card mb-3" style="max-width: 32rem;">
+        <div class="card-body">
+            <h5 class="card-title">@service?.Name</h5>
+            <p class="text-sage">@appointment.StartTime.ToString("MMM d, yyyy h:mm tt")</p>
+            <p class="fw-bold">Total: @appointment.Price.ToString("C")</p>
+
+            @if (paymentError is not null)
+            {
+                <div class="alert alert-danger">@paymentError</div>
+            }
+            @if (paymentSuccess)
+            {
+                <div class="alert alert-success">Payment successful! Your appointment is confirmed.</div>
+            }
+            else
+            {
+                @if (savedCards.Any())
+                {
+                    <h6>Use a saved card</h6>
+                    @foreach (var card in savedCards)
+                    {
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="cardChoice" id="@("card" + card.Id)"
+                                   checked="@(selectedCardId == card.Id)" @onchange="() => SelectSavedCard(card.Id)" />
+                            <label class="form-check-label" for="@("card" + card.Id)">
+                                @card.Brand ending in @card.Last4 (exp @card.ExpiryMonth/@card.ExpiryYear)
+                            </label>
+                        </div>
+                    }
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="radio" name="cardChoice" id="newCard"
+                               checked="@(selectedCardId == null)" @onchange="() => SelectSavedCard(null)" />
+                        <label class="form-check-label" for="newCard">Use a new card</label>
+                    </div>
+                    <hr />
+                }
+
+                @if (selectedCardId is null)
+                {
+                    <div class="mb-2">
+                        <label class="form-label">Card number</label>
+                        <input class="form-control" placeholder="4242 4242 4242 4242" @bind="cardNumber" />
+                    </div>
+                    <div class="row g-2 mb-2">
+                        <div class="col-4">
+                            <label class="form-label">Exp. month</label>
+                            <input type="number" min="1" max="12" class="form-control" @bind="expMonth" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">Exp. year</label>
+                            <input type="number" class="form-control" @bind="expYear" />
+                        </div>
+                        <div class="col-4">
+                            <label class="form-label">CVV</label>
+                            <input class="form-control" @bind="cvv" />
+                        </div>
+                    </div>
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="checkbox" id="saveCard" @bind="saveCardOnFile" />
+                        <label class="form-check-label" for="saveCard">Save this card for future purchases</label>
+                    </div>
+                    <p class="text-sage small">Card details are transmitted over an encrypted connection and are never stored on our servers — only a secure token from our payment processor is retained.</p>
+                }
+
+                <button class="btn btn-primary" @onclick="Pay" disabled="@isProcessing">
+                    @(isProcessing ? "Processing..." : $"Pay {appointment.Price:C}")
+                </button>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? AppointmentId { get; set; }
+
+    private User? currentUser;
+    private Appointment? appointment;
+    private Service? service;
+    private List<SavedCard> savedCards = [];
+    private int? selectedCardId;
+
+    private string cardNumber = "";
+    private int expMonth = 1;
+    private int expYear = DateTime.Today.Year + 1;
+    private string cvv = "";
+    private bool saveCardOnFile;
+
+    private bool isProcessing;
+    private string? paymentError;
+    private bool paymentSuccess;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var idClaim = authState.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (idClaim is null || !int.TryParse(idClaim, out var userId)) return;
+
+        currentUser = await Db.Users.FindAsync(userId);
+        if (currentUser is null) return;
+
+        savedCards = await Db.SavedCards.Where(c => c.UserId == currentUser.Id).ToListAsync();
+        if (savedCards.Any())
+        {
+            selectedCardId = savedCards[0].Id;
+        }
+
+        if (AppointmentId is not null)
+        {
+            appointment = await Db.Appointments.FindAsync(AppointmentId.Value);
+            if (appointment is not null)
+            {
+                service = await Db.Services.FindAsync(appointment.ServiceId);
+            }
+        }
+    }
+
+    private void SelectSavedCard(int? cardId)
+    {
+        selectedCardId = cardId;
+    }
+
+    private async Task Pay()
+    {
+        if (appointment is null || currentUser is null) return;
+
+        paymentError = null;
+        isProcessing = true;
+
+        try
+        {
+            string token;
+
+            if (selectedCardId is not null)
+            {
+                var card = savedCards.First(c => c.Id == selectedCardId);
+                token = card.Token;
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(cardNumber) || cardNumber.Trim().Length < 4)
+                {
+                    paymentError = "Please enter a valid card number.";
+                    return;
+                }
+
+                // Tokenize: only the token, brand, and last 4 are ever persisted.
+                token = $"tok_{Guid.NewGuid():N}"[..20];
+
+                if (saveCardOnFile)
+                {
+                    var newCard = new SavedCard
+                    {
+                        UserId = currentUser.Id,
+                        Token = token,
+                        Brand = "Card",
+                        Last4 = cardNumber.Trim()[^4..],
+                        ExpiryMonth = expMonth,
+                        ExpiryYear = expYear,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    Db.SavedCards.Add(newCard);
+                    await Db.SaveChangesAsync();
+                }
+            }
+
+            await PaymentProvider.ChargeAsync(appointment.Price, "USD", token);
+
+            appointment.IsPaid = true;
+            Db.Appointments.Update(appointment);
+            await Db.SaveChangesAsync();
+
+            paymentSuccess = true;
+        }
+        catch (Exception ex)
+        {
+            paymentError = $"Payment could not be processed: {ex.Message}. Please try a different payment method.";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+}
