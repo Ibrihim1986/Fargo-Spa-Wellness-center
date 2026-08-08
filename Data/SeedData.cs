@@ -17,6 +17,7 @@ public static class SeedData
         await SeedTestimonialsAsync(db);
         await SeedWaiversAsync(db);
         await SeedHealthFlagsAsync(db);
+        await SeedKidsPricingTierAsync(db);
     }
 
     private static async Task SeedServicesAsync(AppDbContext db)
@@ -175,6 +176,8 @@ public static class SeedData
             NewSeedUser("Sarah", "Mitchell", "sarah.mitchell@example.com", "701-555-0201", "Client"),
             NewSeedUser("James", "Carter", "james.carter@example.com", "701-555-0202", "Client"),
             NewSeedUser("Maria", "Gonzalez", "maria.gonzalez@example.com", "701-555-0203", "Client"),
+            // US-603: a child client, to demonstrate the kids' pricing tier
+            NewSeedUser("Ben", "Mitchell", "ben.mitchell@example.com", "701-555-0204", "Client", dateOfBirth: DateTime.Today.AddYears(-9)),
 
             // Testimonial authors
             NewSeedUser("Jessica", "Turner", "jessica.turner@example.com", "701-555-0301", "Client"),
@@ -209,7 +212,7 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        User NewSeedUser(string firstName, string lastName, string email, string phone, string role, string? title = null, string? bio = null)
+        User NewSeedUser(string firstName, string lastName, string email, string phone, string role, string? title = null, string? bio = null, DateTime? dateOfBirth = null)
         {
             return new User
             {
@@ -220,6 +223,7 @@ public static class SeedData
                 Role = role,
                 Title = title,
                 Bio = bio,
+                DateOfBirth = dateOfBirth,
                 PasswordHash = SeedPasswordHash,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -454,6 +458,29 @@ public static class SeedData
         };
 
         db.ClientHealthFlags.AddRange(flags);
+        await db.SaveChangesAsync();
+    }
+
+    // US-603: a discounted kids' tier on Customized Facial, so the pricing rule is demonstrable when booking as Ben Mitchell
+    private static async Task SeedKidsPricingTierAsync(AppDbContext db)
+    {
+        if (await db.Set<ServicePricingTier>().AnyAsync())
+        {
+            return;
+        }
+
+        var facial = await db.Services.FirstAsync(s => s.Name == "Customized Facial");
+
+        db.Set<ServicePricingTier>().Add(new ServicePricingTier
+        {
+            ServiceId = facial.Id,
+            ProviderId = null,
+            DurationMinutes = facial.DurationMinutes,
+            Price = 20m,
+            MaxAge = 12,
+            IsActive = true,
+        });
+
         await db.SaveChangesAsync();
     }
 }

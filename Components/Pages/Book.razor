@@ -4,9 +4,11 @@
 @using System.Security.Claims
 @using Family_and_Spa_Wellness.Data
 @using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
 @inject AuthenticationStateProvider AuthStateProvider
+@inject PricingService Pricing
 
 <!-- US-703: book an appointment online in a few steps -->
 <PageTitle>Book Now - Fargo Spa and Wellness</PageTitle>
@@ -83,13 +85,18 @@ else
             }
         </div>
         <button class="btn btn-outline-secondary me-2" @onclick="() => currentStep = 1">Back</button>
-        <button class="btn btn-primary" disabled="@(selectedHour == 0)" @onclick="() => currentStep = 3">Next</button>
+        <button class="btn btn-primary" disabled="@(selectedHour == 0)" @onclick="GoToConfirmStep">Next</button>
     }
     else if (currentStep == 3)
     {
         <h2 class="h5">Confirm Booking</h2>
         <p>
-            <strong>@selectedService?.Name</strong><br />
+            <strong>@selectedService?.Name</strong> — @previewPrice.ToString("C")
+            @if (kidsPricingApplied)
+            {
+                <span class="badge-featured ms-1">Kids Pricing</span>
+            }
+            <br />
             @(selectedProviderId == 0 ? "Any available provider" : selectedProvider?.FullName)<br />
             @selectedDate.ToString("dddd, MMM d, yyyy") at @FormatHour(selectedHour)
         </p>
@@ -113,6 +120,8 @@ else
     private HashSet<int> bookedHours = [];
     private HashSet<int> blockedHours = [];
     private int completedSessionCount;
+    private decimal previewPrice;
+    private bool kidsPricingApplied;
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -147,6 +156,21 @@ else
         selectedService = service;
         currentStep = 2;
         await RefreshAvailabilityAsync();
+    }
+
+    // US-603: compute the price (kids' tier if the client qualifies) to show before the client confirms
+    private async Task GoToConfirmStep()
+    {
+        var providerId = selectedProviderId == 0 ? (int?)null : selectedProviderId;
+        var clientAge = ComputeAge(currentUser?.DateOfBirth);
+
+        previewPrice = await Pricing.GetPriceForBookingAsync(selectedService!.Id, providerId, selectedService!.DurationMinutes, clientAge);
+
+        kidsPricingApplied = clientAge.HasValue && await Db.Set<ServicePricingTier>()
+            .AnyAsync(t => t.ServiceId == selectedService!.Id && t.IsActive && t.DurationMinutes == selectedService!.DurationMinutes
+                && t.MaxAge != null && t.MaxAge >= clientAge && (t.ProviderId == providerId || t.ProviderId == null));
+
+        currentStep = 3;
     }
 
     // US-702: recompute which hours are already booked or blocked for the selected provider/date
@@ -195,7 +219,7 @@ else
             StartTime = startTime,
             EndTime = startTime.AddMinutes(selectedService.DurationMinutes),
             CreatedAt = DateTime.UtcNow,
-            Price = selectedService.Price,
+            Price = previewPrice,
             Status = "Upcoming",
         });
         await Db.SaveChangesAsync();
@@ -204,4 +228,21 @@ else
     }
 
     private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
+
+    // US-603: derive the client's age in years from their date of birth, if known
+    private static int? ComputeAge(DateTime? dateOfBirth)
+    {
+        if (dateOfBirth is not DateTime dob)
+        {
+            return null;
+        }
+
+        var today = DateTime.Today;
+        var age = today.Year - dob.Year;
+        if (dob.Date > today.AddYears(-age))
+        {
+            age--;
+        }
+        return age;
+    }
 }

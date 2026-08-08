@@ -21,9 +21,23 @@ public class PricingService
             .ToListAsync();
     }
 
-    // Determine price for a booking: prefer provider-specific tier for the exact duration, then global tier, then fallback to service.Price
-    public async Task<decimal> GetPriceForBookingAsync(int serviceId, int? providerId, int durationMinutes)
+    // Determine price for a booking: prefer a matching kids' tier for the client's age, then provider-specific tier
+    // for the exact duration, then global tier, then fallback to service.Price
+    public async Task<decimal> GetPriceForBookingAsync(int serviceId, int? providerId, int durationMinutes, int? clientAge = null)
     {
+        // US-603: flag/apply kids' pricing tier for child clients
+        if (clientAge.HasValue)
+        {
+            var kidsTier = await _db.Set<ServicePricingTier>()
+                .Where(t => t.ServiceId == serviceId && t.IsActive && t.DurationMinutes == durationMinutes
+                    && t.MaxAge != null && t.MaxAge >= clientAge
+                    && (t.ProviderId == providerId || t.ProviderId == null))
+                .OrderByDescending(t => t.ProviderId != null) // prefer a provider-specific kids tier if both exist
+                .FirstOrDefaultAsync();
+            if (kidsTier is not null)
+                return kidsTier.Price;
+        }
+
         if (providerId.HasValue)
         {
             var providerTier = await _db.Set<ServicePricingTier>()
