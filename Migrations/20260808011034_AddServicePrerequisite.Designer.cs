@@ -3,6 +3,7 @@ using System;
 using Family_and_Spa_Wellness.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Family_and_Spa_Wellness.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808011034_AddServicePrerequisite")]
+    partial class AddServicePrerequisite
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -30,9 +33,6 @@ namespace Family_and_Spa_Wellness.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("EndTime")
-                        .HasColumnType("TEXT");
-
-                    b.Property<Guid?>("GroupBookingId")
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("Price")
@@ -200,9 +200,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("MaxAge")
-                        .HasColumnType("INTEGER");
-
                     b.Property<decimal>("Price")
                         .HasColumnType("TEXT");
 
@@ -342,9 +339,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<DateTime?>("DateOfBirth")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -363,9 +357,6 @@ namespace Family_and_Spa_Wellness.Migrations
 
                     b.Property<string>("Phone")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Preferences")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Role")

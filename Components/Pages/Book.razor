@@ -1,14 +1,310 @@
 @page "/book"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
+@inject PricingService Pricing
 
+<!-- US-703: book an appointment online in a few steps -->
 <PageTitle>Book Now - Fargo Spa and Wellness</PageTitle>
 
 <h1>Book an Appointment</h1>
-<p>Online booking is coming soon.</p>
 
-@((MarkupString)"<!-- US-712: Book a couples or side-by-side appointment -->")
-<div class="form-check mt-3">
-    <input class="form-check-input" type="checkbox" disabled id="bookForTwo" />
-    <label class="form-check-label" for="bookForTwo">
-        Book for two (couples / side-by-side appointment) — coming soon
-    </label>
-</div>
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else if (bookingComplete)
+{
+    <div class="card">
+        <div class="card-body">
+            <h2 class="h4">You're booked!</h2>
+            <p>@selectedService?.Name with @(selectedProvider?.FullName ?? "an available provider") on @selectedDate.ToString("dddd, MMM d, yyyy") at @FormatHour(selectedHour).</p>
+            <a class="btn btn-primary" href="/dashboard">Go to Dashboard</a>
+        </div>
+    </div>
+}
+else
+{
+    <p class="text-sage">Step @currentStep of 3</p>
+
+    @if (currentStep == 1)
+    {
+        <h2 class="h5">Choose a Service</h2>
+        <div class="d-flex flex-column gap-2">
+            @foreach (var service in services)
+            {
+                <!-- US-406: enforce prerequisite rules before showing a service as bookable -->
+                var isEligible = service.RequiredPriorSessionCount is not int required || completedSessionCount >= required;
+                <button class="btn btn-outline-primary text-start" disabled="@(!isEligible)" @onclick="() => SelectService(service)">
+                    <strong>@service.Name</strong> — @service.Category, @service.DurationMinutes min
+                    @if (!isEligible)
+                    {
+                        <div class="text-sage small">Requires @service.RequiredPriorSessionCount completed session(s) first — you have @completedSessionCount.</div>
+                    }
+                </button>
+            }
+        </div>
+    }
+    else if (currentStep == 2)
+    {
+        <h2 class="h5">Choose a Provider, Date &amp; Time</h2>
+        <div class="mb-3">
+            <label class="form-label">Provider</label>
+            <select class="form-select w-auto" @bind="selectedProviderId" @bind:after="RefreshAvailabilityAsync">
+                <option value="0">Any available provider</option>
+                @foreach (var provider in providers)
+                {
+                    <option value="@provider.Id">@provider.FullName — @provider.Title</option>
+                }
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-control w-auto" @bind="selectedDate" @bind:format="yyyy-MM-dd" @bind:after="RefreshAvailabilityAsync" />
+        </div>
+
+        <!-- US-712: book a couples/side-by-side appointment -->
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" id="bookForTwo" @bind="bookForTwo" @bind:after="RefreshAvailabilityAsync" />
+            <label class="form-check-label" for="bookForTwo">
+                Book for two (couples / side-by-side appointment)
+            </label>
+        </div>
+        @if (bookForTwo)
+        {
+            <div class="mb-3">
+                <label class="form-label">Second Provider</label>
+                <select class="form-select w-auto" @bind="secondProviderId" @bind:after="RefreshAvailabilityAsync">
+                    <option value="0">Select a provider</option>
+                    @foreach (var provider in providers.Where(p => p.Id != selectedProviderId))
+                    {
+                        <option value="@provider.Id">@provider.FullName — @provider.Title</option>
+                    }
+                </select>
+            </div>
+        }
+
+        <!-- US-702: real-time availability for a specific provider -->
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            @foreach (var hour in AvailabilityHours)
+            {
+                var isTaken = (selectedProviderId != 0 && (bookedHours.Contains(hour) || blockedHours.Contains(hour)))
+                    || (bookForTwo && secondProviderId != 0 && (secondBookedHours.Contains(hour) || secondBlockedHours.Contains(hour)));
+                <button class="btn btn-sm @(selectedHour == hour ? "btn-primary" : "btn-outline-secondary")"
+                        disabled="@isTaken"
+                        @onclick="() => selectedHour = hour">
+                    @FormatHour(hour)
+                    @if (isTaken)
+                    {
+                        <div class="slot-state">Unavailable</div>
+                    }
+                </button>
+            }
+        </div>
+        <button class="btn btn-outline-secondary me-2" @onclick="() => currentStep = 1">Back</button>
+        <button class="btn btn-primary" disabled="@(selectedHour == 0 || (bookForTwo && secondProviderId == 0))" @onclick="GoToConfirmStep">Next</button>
+    }
+    else if (currentStep == 3)
+    {
+        <h2 class="h5">Confirm Booking</h2>
+        <p>
+            <strong>@selectedService?.Name</strong> — @previewPrice.ToString("C")
+            @if (kidsPricingApplied)
+            {
+                <span class="badge-featured ms-1">Kids Pricing</span>
+            }
+            <br />
+            @(selectedProviderId == 0 ? "Any available provider" : selectedProvider?.FullName)
+            @if (bookForTwo)
+            {
+                <text> &amp; @(providers.FirstOrDefault(p => p.Id == secondProviderId)?.FullName)</text>
+            }
+            <br />
+            @selectedDate.ToString("dddd, MMM d, yyyy") at @FormatHour(selectedHour)
+        </p>
+        <button class="btn btn-outline-secondary me-2" @onclick="() => currentStep = 2">Back</button>
+        <button class="btn btn-primary" @onclick="ConfirmBooking">Confirm Booking</button>
+    }
+}
+
+@code {
+    private User? currentUser;
+    private List<Service> services = [];
+    private List<User> providers = [];
+
+    private int currentStep = 1;
+    private Service? selectedService;
+    private int selectedProviderId;
+    private User? selectedProvider => providers.FirstOrDefault(p => p.Id == selectedProviderId);
+    private DateTime selectedDate = DateTime.Today.AddDays(1);
+    private int selectedHour;
+    private bool bookingComplete;
+    private HashSet<int> bookedHours = [];
+    private HashSet<int> blockedHours = [];
+    private int completedSessionCount;
+    private decimal previewPrice;
+    private bool kidsPricingApplied;
+    private bool bookForTwo;
+    private int secondProviderId;
+    private HashSet<int> secondBookedHours = [];
+    private HashSet<int> secondBlockedHours = [];
+
+    private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        providers = await Db.Users.Where(u => u.Role == "Provider").OrderBy(u => u.FirstName).ToListAsync();
+
+        if (currentUser is not null)
+        {
+            completedSessionCount = await Db.Appointments
+                .CountAsync(a => a.ClientId == currentUser.Id && a.Status == "Completed");
+        }
+    }
+
+    // US-703: move to the provider/date/time step once a service is chosen
+    private async Task SelectService(Service service)
+    {
+        var isEligible = service.RequiredPriorSessionCount is not int required || completedSessionCount >= required;
+        if (!isEligible)
+        {
+            return;
+        }
+
+        selectedService = service;
+        currentStep = 2;
+        await RefreshAvailabilityAsync();
+    }
+
+    // US-603: compute the price (kids' tier if the client qualifies) to show before the client confirms
+    private async Task GoToConfirmStep()
+    {
+        var providerId = selectedProviderId == 0 ? (int?)null : selectedProviderId;
+        var clientAge = ComputeAge(currentUser?.DateOfBirth);
+
+        previewPrice = await Pricing.GetPriceForBookingAsync(selectedService!.Id, providerId, selectedService!.DurationMinutes, clientAge);
+
+        kidsPricingApplied = clientAge.HasValue && await Db.Set<ServicePricingTier>()
+            .AnyAsync(t => t.ServiceId == selectedService!.Id && t.IsActive && t.DurationMinutes == selectedService!.DurationMinutes
+                && t.MaxAge != null && t.MaxAge >= clientAge && (t.ProviderId == providerId || t.ProviderId == null));
+
+        currentStep = 3;
+    }
+
+    // US-702: recompute which hours are already booked or blocked for the selected provider/date
+    private async Task RefreshAvailabilityAsync()
+    {
+        selectedHour = 0;
+        (bookedHours, blockedHours) = await GetProviderHoursAsync(selectedProviderId);
+
+        // US-712: also check the second provider's availability when booking for two
+        (secondBookedHours, secondBlockedHours) = bookForTwo
+            ? await GetProviderHoursAsync(secondProviderId)
+            : ([], []);
+    }
+
+    private async Task<(HashSet<int> booked, HashSet<int> blocked)> GetProviderHoursAsync(int providerId)
+    {
+        if (providerId == 0)
+        {
+            return ([], []);
+        }
+
+        var booked = (await Db.Appointments
+            .Where(a => a.ProviderId == providerId
+                && a.StartTime.Date == selectedDate.Date
+                && a.Status != "Cancelled")
+            .Select(a => a.StartTime.Hour)
+            .ToListAsync())
+            .ToHashSet();
+
+        var blocked = (await Db.ProviderAvailabilities
+            .Where(a => a.ProviderId == providerId && a.Date == selectedDate.Date && !a.IsAvailable)
+            .Select(a => a.Hour)
+            .ToListAsync())
+            .ToHashSet();
+
+        return (booked, blocked);
+    }
+
+    // US-703: create the appointment from the selections made across the wizard steps
+    private async Task ConfirmBooking()
+    {
+        if (currentUser is null || selectedService is null || selectedHour == 0)
+        {
+            return;
+        }
+
+        var providerId = selectedProviderId == 0 ? (int?)null : selectedProviderId;
+        var startTime = selectedDate.Date.AddHours(selectedHour);
+
+        // US-712: book a couples/side-by-side appointment — two linked appointments sharing a GroupBookingId
+        var groupBookingId = bookForTwo ? Guid.NewGuid() : (Guid?)null;
+
+        Db.Appointments.Add(new Appointment
+        {
+            ClientId = currentUser.Id,
+            ServiceId = selectedService.Id,
+            ProviderId = providerId,
+            StartTime = startTime,
+            EndTime = startTime.AddMinutes(selectedService.DurationMinutes),
+            CreatedAt = DateTime.UtcNow,
+            Price = previewPrice,
+            Status = "Upcoming",
+            GroupBookingId = groupBookingId,
+        });
+
+        if (bookForTwo)
+        {
+            Db.Appointments.Add(new Appointment
+            {
+                ClientId = currentUser.Id,
+                ServiceId = selectedService.Id,
+                ProviderId = secondProviderId,
+                StartTime = startTime,
+                EndTime = startTime.AddMinutes(selectedService.DurationMinutes),
+                CreatedAt = DateTime.UtcNow,
+                Price = previewPrice,
+                Status = "Upcoming",
+                GroupBookingId = groupBookingId,
+            });
+        }
+
+        await Db.SaveChangesAsync();
+
+        bookingComplete = true;
+    }
+
+    private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
+
+    // US-603: derive the client's age in years from their date of birth, if known
+    private static int? ComputeAge(DateTime? dateOfBirth)
+    {
+        if (dateOfBirth is not DateTime dob)
+        {
+            return null;
+        }
+
+        var today = DateTime.Today;
+        var age = today.Year - dob.Year;
+        if (dob.Date > today.AddYears(-age))
+        {
+            age--;
+        }
+        return age;
+    }
+}
