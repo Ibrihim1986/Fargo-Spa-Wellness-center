@@ -3,6 +3,7 @@ using System;
 using Family_and_Spa_Wellness.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Family_and_Spa_Wellness.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260808002435_AddServiceNotes")]
+    partial class AddServiceNotes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
@@ -57,32 +60,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.HasIndex("ServiceId");
 
                     b.ToTable("Appointments");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ClientHealthFlag", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Details")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FlagType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("ClientHealthFlags");
                 });
 
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.ProviderAvailability", b =>
@@ -135,9 +112,6 @@ namespace Family_and_Spa_Wellness.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<decimal>("Price")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RequiresWaiverType")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
@@ -368,32 +342,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Waiver", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ClientId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsSigned")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("SignedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WaiverType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ClientId");
-
-                    b.ToTable("Waivers");
-                });
-
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.Appointment", b =>
                 {
                     b.HasOne("Family_and_Spa_Wellness.Models.User", null)
@@ -410,15 +358,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.HasOne("Family_and_Spa_Wellness.Models.Service", null)
                         .WithMany()
                         .HasForeignKey("ServiceId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ClientHealthFlag", b =>
-                {
-                    b.HasOne("Family_and_Spa_Wellness.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -481,15 +420,6 @@ namespace Family_and_Spa_Wellness.Migrations
                         .WithMany()
                         .HasForeignKey("ServiceId")
                         .OnDelete(DeleteBehavior.Restrict);
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Waiver", b =>
-                {
-                    b.HasOne("Family_and_Spa_Wellness.Models.User", null)
-                        .WithMany()
-                        .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }
