@@ -1,14 +1,150 @@
 @page "/book"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-703: book an appointment online in a few steps -->
 <PageTitle>Book Now - Fargo Spa and Wellness</PageTitle>
 
 <h1>Book an Appointment</h1>
-<p>Online booking is coming soon.</p>
 
-@((MarkupString)"<!-- US-712: Book a couples or side-by-side appointment -->")
-<div class="form-check mt-3">
-    <input class="form-check-input" type="checkbox" disabled id="bookForTwo" />
-    <label class="form-check-label" for="bookForTwo">
-        Book for two (couples / side-by-side appointment) — coming soon
-    </label>
-</div>
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else if (bookingComplete)
+{
+    <div class="card">
+        <div class="card-body">
+            <h2 class="h4">You're booked!</h2>
+            <p>@selectedService?.Name with @(selectedProvider?.FullName ?? "an available provider") on @selectedDate.ToString("dddd, MMM d, yyyy") at @FormatHour(selectedHour).</p>
+            <a class="btn btn-primary" href="/dashboard">Go to Dashboard</a>
+        </div>
+    </div>
+}
+else
+{
+    <p class="text-sage">Step @currentStep of 3</p>
+
+    @if (currentStep == 1)
+    {
+        <h2 class="h5">Choose a Service</h2>
+        <div class="d-flex flex-column gap-2">
+            @foreach (var service in services)
+            {
+                <button class="btn btn-outline-primary text-start" @onclick="() => SelectService(service)">
+                    <strong>@service.Name</strong> — @service.Category, @service.DurationMinutes min
+                </button>
+            }
+        </div>
+    }
+    else if (currentStep == 2)
+    {
+        <h2 class="h5">Choose a Provider, Date &amp; Time</h2>
+        <div class="mb-3">
+            <label class="form-label">Provider</label>
+            <select class="form-select w-auto" @bind="selectedProviderId">
+                <option value="0">Any available provider</option>
+                @foreach (var provider in providers)
+                {
+                    <option value="@provider.Id">@provider.FullName — @provider.Title</option>
+                }
+            </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Date</label>
+            <input type="date" class="form-control w-auto" @bind="selectedDate" @bind:format="yyyy-MM-dd" />
+        </div>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+            @foreach (var hour in AvailabilityHours)
+            {
+                <button class="btn btn-sm @(selectedHour == hour ? "btn-primary" : "btn-outline-secondary")" @onclick="() => selectedHour = hour">
+                    @FormatHour(hour)
+                </button>
+            }
+        </div>
+        <button class="btn btn-outline-secondary me-2" @onclick="() => currentStep = 1">Back</button>
+        <button class="btn btn-primary" disabled="@(selectedHour == 0)" @onclick="() => currentStep = 3">Next</button>
+    }
+    else if (currentStep == 3)
+    {
+        <h2 class="h5">Confirm Booking</h2>
+        <p>
+            <strong>@selectedService?.Name</strong><br />
+            @(selectedProviderId == 0 ? "Any available provider" : selectedProvider?.FullName)<br />
+            @selectedDate.ToString("dddd, MMM d, yyyy") at @FormatHour(selectedHour)
+        </p>
+        <button class="btn btn-outline-secondary me-2" @onclick="() => currentStep = 2">Back</button>
+        <button class="btn btn-primary" @onclick="ConfirmBooking">Confirm Booking</button>
+    }
+}
+
+@code {
+    private User? currentUser;
+    private List<Service> services = [];
+    private List<User> providers = [];
+
+    private int currentStep = 1;
+    private Service? selectedService;
+    private int selectedProviderId;
+    private User? selectedProvider => providers.FirstOrDefault(p => p.Id == selectedProviderId);
+    private DateTime selectedDate = DateTime.Today.AddDays(1);
+    private int selectedHour;
+    private bool bookingComplete;
+
+    private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+        providers = await Db.Users.Where(u => u.Role == "Provider").OrderBy(u => u.FirstName).ToListAsync();
+    }
+
+    // US-703: move to the provider/date/time step once a service is chosen
+    private void SelectService(Service service)
+    {
+        selectedService = service;
+        currentStep = 2;
+    }
+
+    // US-703: create the appointment from the selections made across the wizard steps
+    private async Task ConfirmBooking()
+    {
+        if (currentUser is null || selectedService is null || selectedHour == 0)
+        {
+            return;
+        }
+
+        var providerId = selectedProviderId == 0 ? (int?)null : selectedProviderId;
+        var startTime = selectedDate.Date.AddHours(selectedHour);
+
+        Db.Appointments.Add(new Appointment
+        {
+            ClientId = currentUser.Id,
+            ServiceId = selectedService.Id,
+            ProviderId = providerId,
+            StartTime = startTime,
+            EndTime = startTime.AddMinutes(selectedService.DurationMinutes),
+            CreatedAt = DateTime.UtcNow,
+            Price = selectedService.Price,
+            Status = "Upcoming",
+        });
+        await Db.SaveChangesAsync();
+
+        bookingComplete = true;
+    }
+
+    private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
+}
