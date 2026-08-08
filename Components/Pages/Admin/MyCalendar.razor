@@ -40,6 +40,14 @@ else
                             <!-- US-405: alert if a client hasn't completed a required waiver -->
                             <span class="badge-featured mt-1 d-inline-block">⚠ Waiver not on file</span>
                         }
+                        @if (row.Client is not null && healthFlagsByClient.TryGetValue(row.Client.Id, out var flags))
+                        {
+                            <!-- US-503: flag health conditions relevant to a treatment -->
+                            @foreach (var flag in flags)
+                            {
+                                <span class="badge-featured mt-1 d-inline-block" title="@flag.Details">⚠ @flag.FlagType</span>
+                            }
+                        }
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" @onclick="() => CompleteAppointment(row.Appointment)">Complete</button>
@@ -74,6 +82,7 @@ else
     private HashSet<int> bookedHoursToday = [];
     private HashSet<int> unavailableHoursToday = [];
     private HashSet<int> missingWaiverAppointmentIds = [];
+    private Dictionary<int, List<ClientHealthFlag>> healthFlagsByClient = [];
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -112,6 +121,7 @@ else
             .ToList();
 
         await LoadMissingWaiversAsync();
+        await LoadHealthFlagsAsync();
 
         bookedHoursToday = appointments
             .Where(a => a.StartTime.Date == DateTime.Today)
@@ -149,6 +159,29 @@ else
             .Where(r => !signedSet.Contains((r.Client!.Id, r.Service!.RequiresWaiverType!)))
             .Select(r => r.Appointment.Id)
             .ToHashSet();
+    }
+
+    // US-503: surface active health flags for clients on the provider's schedule
+    private async Task LoadHealthFlagsAsync()
+    {
+        var clientIds = upcomingAppointments
+            .Where(r => r.Client is not null)
+            .Select(r => r.Client!.Id)
+            .ToHashSet();
+
+        if (clientIds.Count == 0)
+        {
+            healthFlagsByClient = [];
+            return;
+        }
+
+        var flags = await Db.ClientHealthFlags
+            .Where(f => f.IsActive && clientIds.Contains(f.ClientId))
+            .ToListAsync();
+
+        healthFlagsByClient = flags
+            .GroupBy(f => f.ClientId)
+            .ToDictionary(g => g.Key, g => g.ToList());
     }
 
     private async Task CompleteAppointment(Appointment appointment)

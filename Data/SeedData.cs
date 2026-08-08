@@ -16,6 +16,7 @@ public static class SeedData
         await SeedAppointmentsAsync(db);
         await SeedTestimonialsAsync(db);
         await SeedWaiversAsync(db);
+        await SeedHealthFlagsAsync(db);
     }
 
     private static async Task SeedServicesAsync(AppDbContext db)
@@ -420,6 +421,38 @@ public static class SeedData
         };
 
         db.Waivers.AddRange(waivers);
+        await db.SaveChangesAsync();
+    }
+
+    // US-503: a couple of clients with active health flags, so the badge is demonstrable on the schedule view
+    private static async Task SeedHealthFlagsAsync(AppDbContext db)
+    {
+        if (await db.ClientHealthFlags.AnyAsync())
+        {
+            return;
+        }
+
+        var users = await db.Users.ToDictionaryAsync(u => u.Email);
+
+        var flags = new[]
+        {
+            new ClientHealthFlag
+            {
+                ClientId = users["james.carter@example.com"].Id,
+                FlagType = "Allergy",
+                Details = "Sensitive to almond and coconut-based massage oils — use fragrance-free lotion.",
+                IsActive = true,
+            },
+            new ClientHealthFlag
+            {
+                ClientId = users["maria.gonzalez@example.com"].Id,
+                FlagType = "BloodThinner",
+                Details = "Client is on a blood-thinning medication — expect increased bruising risk with injectables.",
+                IsActive = true,
+            },
+        };
+
+        db.ClientHealthFlags.AddRange(flags);
         await db.SaveChangesAsync();
     }
 }
