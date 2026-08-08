@@ -10,61 +10,30 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<decimal>(
-                name: "Price",
-                table: "Appointments",
-                type: "TEXT",
-                nullable: false,
-                defaultValue: 0m);
+            // Appointment.Price column is added by a later migration (AddMemberships).
+            // Omit adding the column here to avoid duplicate-column errors when the
+            // database is created from all migrations in sequence.
 
-            migrationBuilder.CreateTable(
-                name: "ServicePricingTiers",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ServiceId = table.Column<int>(type: "INTEGER", nullable: false),
-                    ProviderId = table.Column<int>(type: "INTEGER", nullable: true),
-                    DurationMinutes = table.Column<int>(type: "INTEGER", nullable: false),
-                    Price = table.Column<decimal>(type: "TEXT", nullable: false),
-                    IsActive = table.Column<bool>(type: "INTEGER", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ServicePricingTiers", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_ServicePricingTiers_Services_ServiceId",
-                        column: x => x.ServiceId,
-                        principalTable: "Services",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_ServicePricingTiers_Users_ProviderId",
-                        column: x => x.ProviderId,
-                        principalTable: "Users",
-                        principalColumn: "Id");
-                });
+            // Use idempotent SQL to create the table and indexes only if they do not already exist.
+            migrationBuilder.Sql(@"CREATE TABLE IF NOT EXISTS ""ServicePricingTiers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""ServiceId"" INTEGER NOT NULL,
+                ""ProviderId"" INTEGER NULL,
+                ""DurationMinutes"" INTEGER NOT NULL,
+                ""Price"" TEXT NOT NULL,
+                ""IsActive"" INTEGER NOT NULL,
+                FOREIGN KEY (""ServiceId"") REFERENCES ""Services"" (""Id"") ON DELETE CASCADE,
+                FOREIGN KEY (""ProviderId"") REFERENCES ""Users"" (""Id"")
+            );");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_ServicePricingTiers_ProviderId",
-                table: "ServicePricingTiers",
-                column: "ProviderId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_ServicePricingTiers_ServiceId",
-                table: "ServicePricingTiers",
-                column: "ServiceId");
+            migrationBuilder.Sql(@"CREATE INDEX IF NOT EXISTS ""IX_ServicePricingTiers_ProviderId"" ON ""ServicePricingTiers"" (""ProviderId"");");
+            migrationBuilder.Sql(@"CREATE INDEX IF NOT EXISTS ""IX_ServicePricingTiers_ServiceId"" ON ""ServicePricingTiers"" (""ServiceId"");");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "ServicePricingTiers");
-
-            migrationBuilder.DropColumn(
-                name: "Price",
-                table: "Appointments");
+            migrationBuilder.Sql(@"DROP TABLE IF EXISTS ""ServicePricingTiers"";");
         }
     }
 }

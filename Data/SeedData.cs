@@ -412,14 +412,12 @@ public static class SeedData
             {
                 ClientId = users["sarah.mitchell@example.com"].Id,
                 WaiverType = "MassageIntake",
-                IsSigned = true,
                 SignedAt = new DateTime(2026, 6, 1),
             },
             new Waiver
             {
                 ClientId = users["maria.gonzalez@example.com"].Id,
                 WaiverType = "MedicalIntake",
-                IsSigned = true,
                 SignedAt = new DateTime(2026, 6, 15),
             },
             // James Carter intentionally has no MassageIntake waiver on file, to demonstrate the alert.

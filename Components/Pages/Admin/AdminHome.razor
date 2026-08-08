@@ -236,10 +236,6 @@ else if (activeTab == "promotions")
     private bool showForm = false;
     private Service? editService;
 
-    private bool showForm = false;
-    private Service? editService;
-    // Pricing management moved to dedicated admin page (/admin/services/pricing/{id})
-
     private static readonly string[] ChartPalette = ["#2E7D6B", "#7C9885", "#C9AE80", "#4a6b60", "#a3b8a9", "#8a765a"];
 
     protected override async Task OnInitializedAsync()
@@ -329,39 +325,6 @@ else if (activeTab == "promotions")
         showForm = true;
     }
 
-    private async Task SaveService()
-    {
-        if (editService == null)
-            return;
-
-        if (string.IsNullOrWhiteSpace(editService.Name))
-            return;
-
-        if (editService.Id == 0)
-        {
-            Db.Services.Add(editService);
-        }
-        else
-        {
-            var dbSvc = await Db.Services.FindAsync(editService.Id);
-            if (dbSvc is null)
-                return;
-
-            dbSvc.Name = editService.Name;
-            dbSvc.Category = editService.Category;
-            dbSvc.Description = editService.Description;
-            dbSvc.DurationMinutes = editService.DurationMinutes;
-            dbSvc.Price = editService.Price;
-            dbSvc.IsActive = editService.IsActive;
-        }
-
-        await Db.SaveChangesAsync();
-        services = await Db.Services.ToListAsync();
-        showForm = false;
-        editService = null;
-        StateHasChanged();
-    }
-
     private void CancelEdit()
     {
         showForm = false;
@@ -379,9 +342,6 @@ else if (activeTab == "promotions")
         services = await Db.Services.ToListAsync();
         StateHasChanged();
     }
-
-    // Pricing methods
-    // Pricing methods moved to Components/Pages/Admin/ServicePricing.razor
 
     private record WeekBucket(string Label, int Count);
     private record CategorySlice(string Category, decimal Amount, string Color);

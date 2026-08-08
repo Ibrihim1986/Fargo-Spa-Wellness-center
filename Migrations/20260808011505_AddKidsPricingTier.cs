@@ -11,17 +11,25 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<DateTime>(
-                name: "DateOfBirth",
-                table: "Users",
-                type: "TEXT",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<DateTime>(
+                    name: "DateOfBirth",
+                    table: "Users",
+                    type: "TEXT",
+                    nullable: true);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<int>(
-                name: "MaxAge",
-                table: "ServicePricingTiers",
-                type: "INTEGER",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<int>(
+                    name: "MaxAge",
+                    table: "ServicePricingTiers",
+                    type: "INTEGER",
+                    nullable: true);
+            }
+            catch { }
         }
 
         /// <inheritdoc />

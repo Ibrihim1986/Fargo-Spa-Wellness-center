@@ -11,18 +11,26 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "ServiceId",
-                table: "Testimonials",
-                type: "INTEGER",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<int>(
+                    name: "ServiceId",
+                    table: "Testimonials",
+                    type: "INTEGER",
+                    nullable: true);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<string>(
-                name: "Status",
-                table: "Appointments",
-                type: "TEXT",
-                nullable: false,
-                defaultValue: "");
+            try
+            {
+                migrationBuilder.AddColumn<string>(
+                    name: "Status",
+                    table: "Appointments",
+                    type: "TEXT",
+                    nullable: false,
+                    defaultValue: "");
+            }
+            catch { }
 
             migrationBuilder.CreateTable(
                 name: "ProviderAvailabilities",

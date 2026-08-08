@@ -17,32 +17,17 @@ namespace Family_and_Spa_Wellness.Migrations
                 type: "TEXT",
                 nullable: true);
 
-            migrationBuilder.CreateTable(
-                name: "Waivers",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ClientId = table.Column<int>(type: "INTEGER", nullable: false),
-                    WaiverType = table.Column<string>(type: "TEXT", nullable: false),
-                    IsSigned = table.Column<bool>(type: "INTEGER", nullable: false),
-                    SignedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Waivers", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Waivers_Users_ClientId",
-                        column: x => x.ClientId,
-                        principalTable: "Users",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
+            // Create Waivers table if it does not already exist (idempotent)
+            migrationBuilder.Sql(@"CREATE TABLE IF NOT EXISTS ""Waivers"" (
+                ""Id"" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                ""ClientId"" INTEGER NOT NULL,
+                ""WaiverType"" TEXT NOT NULL,
+                ""IsSigned"" INTEGER NOT NULL,
+                ""SignedAt"" TEXT NULL,
+                FOREIGN KEY (""ClientId"") REFERENCES ""Users"" (""Id"") ON DELETE RESTRICT
+            );");
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Waivers_ClientId",
-                table: "Waivers",
-                column: "ClientId");
+            migrationBuilder.Sql(@"CREATE INDEX IF NOT EXISTS ""IX_Waivers_ClientId"" ON ""Waivers"" (""ClientId"");");
         }
 
         /// <inheritdoc />

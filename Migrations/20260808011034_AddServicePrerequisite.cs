@@ -10,11 +10,15 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<int>(
-                name: "RequiredPriorSessionCount",
-                table: "Services",
-                type: "INTEGER",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<int>(
+                    name: "RequiredPriorSessionCount",
+                    table: "Services",
+                    type: "INTEGER",
+                    nullable: true);
+            }
+            catch { }
         }
 
         /// <inheritdoc />

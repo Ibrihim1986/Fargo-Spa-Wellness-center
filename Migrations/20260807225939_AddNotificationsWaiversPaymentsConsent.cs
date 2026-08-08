@@ -11,44 +11,68 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "NotificationChannel",
-                table: "Users",
-                type: "TEXT",
-                nullable: false,
-                defaultValue: "");
+            try
+            {
+                migrationBuilder.AddColumn<string>(
+                    name: "NotificationChannel",
+                    table: "Users",
+                    type: "TEXT",
+                    nullable: false,
+                    defaultValue: "");
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<int>(
-                name: "MinimumAge",
-                table: "Services",
-                type: "INTEGER",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<int>(
+                    name: "MinimumAge",
+                    table: "Services",
+                    type: "INTEGER",
+                    nullable: true);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<bool>(
-                name: "RequiresWaiver",
-                table: "Services",
-                type: "INTEGER",
-                nullable: false,
-                defaultValue: false);
+            try
+            {
+                migrationBuilder.AddColumn<bool>(
+                    name: "RequiresWaiver",
+                    table: "Services",
+                    type: "INTEGER",
+                    nullable: false,
+                    defaultValue: false);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<int>(
-                name: "DependentId",
-                table: "Appointments",
-                type: "INTEGER",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<int>(
+                    name: "DependentId",
+                    table: "Appointments",
+                    type: "INTEGER",
+                    nullable: true);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<bool>(
-                name: "IsPaid",
-                table: "Appointments",
-                type: "INTEGER",
-                nullable: false,
-                defaultValue: false);
+            try
+            {
+                migrationBuilder.AddColumn<bool>(
+                    name: "IsPaid",
+                    table: "Appointments",
+                    type: "INTEGER",
+                    nullable: false,
+                    defaultValue: false);
+            }
+            catch { }
 
-            migrationBuilder.AddColumn<string>(
-                name: "ProviderNotes",
-                table: "Appointments",
-                type: "TEXT",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<string>(
+                    name: "ProviderNotes",
+                    table: "Appointments",
+                    type: "TEXT",
+                    nullable: true);
+            }
+            catch { }
 
             migrationBuilder.CreateTable(
                 name: "Dependents",

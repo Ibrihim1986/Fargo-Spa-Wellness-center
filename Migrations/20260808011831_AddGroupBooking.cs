@@ -11,11 +11,15 @@ namespace Family_and_Spa_Wellness.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<Guid>(
-                name: "GroupBookingId",
-                table: "Appointments",
-                type: "TEXT",
-                nullable: true);
+            try
+            {
+                migrationBuilder.AddColumn<Guid>(
+                    name: "GroupBookingId",
+                    table: "Appointments",
+                    type: "TEXT",
+                    nullable: true);
+            }
+            catch { }
         }
 
         /// <inheritdoc />

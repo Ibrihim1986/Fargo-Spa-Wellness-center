@@ -23,7 +23,6 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<GiftCard> GiftCards => Set<GiftCard>();
     public DbSet<Fee> Fees => Set<Fee>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
-    public DbSet<Waiver> Waivers => Set<Waiver>();
 
     // US-709/713
     public DbSet<SavedCard> SavedCards => Set<SavedCard>();
