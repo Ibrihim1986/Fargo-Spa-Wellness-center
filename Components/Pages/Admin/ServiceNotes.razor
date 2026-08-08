@@ -20,7 +20,7 @@
 }
 else if (ClientId is null)
 {
-    <p class="text-sage">Select a client to view service notes.</p>
+    <p class="text-sage">Select a client to view or add service notes.</p>
     <div class="d-flex flex-column gap-1">
         @foreach (var client in clients)
         {
@@ -59,6 +59,27 @@ else
             }
         </div>
     }
+
+    <!-- US-404, US-502, US-602: add treatment/skin-condition/nail-art notes after a session -->
+    <h3 class="h6 mt-4">Add a Note</h3>
+    <EditForm Model="newNote" OnValidSubmit="AddNoteAsync">
+        <div class="mb-2">
+            <label class="form-label">Note Type</label>
+            <InputSelect class="form-select" @bind-Value="newNote.NoteType">
+                <option value="TreatmentNote">Treatment Note</option>
+                <option value="SkinCondition">Skin Condition</option>
+                <option value="ProductUsage">Product Usage</option>
+                <option value="NailArtDetail">Nail Art Detail</option>
+                <option value="Preference">Preference</option>
+                <option value="General">General</option>
+            </InputSelect>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Details</label>
+            <InputTextArea class="form-control" rows="3" @bind-Value="newNote.Content" />
+        </div>
+        <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(newNote.Content)">Save Note</button>
+    </EditForm>
 }
 
 @code {
@@ -72,6 +93,7 @@ else
     private List<User> clients = [];
     private User? selectedClient;
     private List<ServiceNote> existingNotes = [];
+    private NewNoteModel newNote = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -104,5 +126,34 @@ else
             .Where(n => n.ClientId == ClientId)
             .OrderByDescending(n => n.CreatedAt)
             .ToListAsync();
+    }
+
+    // US-404, US-502, US-602: record a treatment/skin-condition/nail-art/preference note after a session
+    private async Task AddNoteAsync()
+    {
+        if (currentUser is null || selectedClient is null || string.IsNullOrWhiteSpace(newNote.Content))
+        {
+            return;
+        }
+
+        Db.ServiceNotes.Add(new ServiceNote
+        {
+            ClientId = selectedClient.Id,
+            ProviderId = currentUser.Id,
+            AppointmentId = AppointmentId,
+            NoteType = newNote.NoteType,
+            Content = newNote.Content.Trim(),
+            CreatedAt = DateTime.UtcNow,
+        });
+        await Db.SaveChangesAsync();
+
+        newNote = new NewNoteModel();
+        await LoadClientAsync();
+    }
+
+    private class NewNoteModel
+    {
+        public string NoteType { get; set; } = "General";
+        public string Content { get; set; } = "";
     }
 }
