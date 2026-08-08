@@ -86,6 +86,7 @@ public static class SeedData
                 DurationMinutes = 35,
                 Price = 0m,
                 IsActive = true,
+                RequiredPriorSessionCount = 1,
             },
             new()
             {

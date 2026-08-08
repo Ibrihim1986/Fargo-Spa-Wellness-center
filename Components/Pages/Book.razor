@@ -37,8 +37,14 @@ else
         <div class="d-flex flex-column gap-2">
             @foreach (var service in services)
             {
-                <button class="btn btn-outline-primary text-start" @onclick="() => SelectService(service)">
+                <!-- US-406: enforce prerequisite rules before showing a service as bookable -->
+                var isEligible = service.RequiredPriorSessionCount is not int required || completedSessionCount >= required;
+                <button class="btn btn-outline-primary text-start" disabled="@(!isEligible)" @onclick="() => SelectService(service)">
                     <strong>@service.Name</strong> — @service.Category, @service.DurationMinutes min
+                    @if (!isEligible)
+                    {
+                        <div class="text-sage small">Requires @service.RequiredPriorSessionCount completed session(s) first — you have @completedSessionCount.</div>
+                    }
                 </button>
             }
         </div>
@@ -106,6 +112,7 @@ else
     private bool bookingComplete;
     private HashSet<int> bookedHours = [];
     private HashSet<int> blockedHours = [];
+    private int completedSessionCount;
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -120,11 +127,23 @@ else
 
         services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
         providers = await Db.Users.Where(u => u.Role == "Provider").OrderBy(u => u.FirstName).ToListAsync();
+
+        if (currentUser is not null)
+        {
+            completedSessionCount = await Db.Appointments
+                .CountAsync(a => a.ClientId == currentUser.Id && a.Status == "Completed");
+        }
     }
 
     // US-703: move to the provider/date/time step once a service is chosen
     private async Task SelectService(Service service)
     {
+        var isEligible = service.RequiredPriorSessionCount is not int required || completedSessionCount >= required;
+        if (!isEligible)
+        {
+            return;
+        }
+
         selectedService = service;
         currentStep = 2;
         await RefreshAvailabilityAsync();

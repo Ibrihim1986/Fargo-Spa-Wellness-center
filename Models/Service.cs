@@ -12,4 +12,7 @@ public class Service
 
     // US-405: waiver type a client must have signed before this service can be performed (null = none required)
     public string? RequiresWaiverType { get; set; }
+
+    // US-406: number of completed appointments (of any service) a client needs before this service is bookable (null/0 = no prerequisite)
+    public int? RequiredPriorSessionCount { get; set; }
 }
