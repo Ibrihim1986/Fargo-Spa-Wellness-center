@@ -80,6 +80,32 @@ else
         </div>
         <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(newNote.Content)">Save Note</button>
     </EditForm>
+
+    <!-- US-504: provider recommends/schedules a follow-up directly from a client's record -->
+    <h3 class="h6 mt-4">Schedule a Follow-up</h3>
+    @if (followUpBooked)
+    {
+        <p class="text-sage">Follow-up scheduled for @followUpDate.ToString("MMM d, yyyy") at @FormatHour(followUpHour).</p>
+    }
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <select class="form-select w-auto" @bind="followUpServiceId">
+            <option value="0">Select a service</option>
+            @foreach (var service in services)
+            {
+                <option value="@service.Id">@service.Name</option>
+            }
+        </select>
+        <input type="date" class="form-control w-auto" @bind="followUpDate" @bind:format="yyyy-MM-dd" />
+    </div>
+    <div class="d-flex flex-wrap gap-2 mb-2">
+        @foreach (var hour in AvailabilityHours)
+        {
+            <button class="btn btn-sm @(followUpHour == hour ? "btn-primary" : "btn-outline-secondary")" @onclick="() => followUpHour = hour">
+                @FormatHour(hour)
+            </button>
+        }
+    </div>
+    <button class="btn btn-primary" disabled="@(followUpServiceId == 0 || followUpHour == 0)" @onclick="ScheduleFollowUpAsync">Schedule Follow-up</button>
 }
 
 @code {
@@ -94,6 +120,13 @@ else
     private User? selectedClient;
     private List<ServiceNote> existingNotes = [];
     private NewNoteModel newNote = new();
+    private List<Service> services = [];
+    private int followUpServiceId;
+    private DateTime followUpDate = DateTime.Today.AddDays(7);
+    private int followUpHour;
+    private bool followUpBooked;
+
+    private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
     protected override async Task OnInitializedAsync()
     {
@@ -103,6 +136,8 @@ else
         {
             currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
         }
+
+        services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
 
         if (ClientId is null)
         {
@@ -150,6 +185,37 @@ else
         newNote = new NewNoteModel();
         await LoadClientAsync();
     }
+
+    // US-504: create a follow-up appointment for this client with the current provider
+    private async Task ScheduleFollowUpAsync()
+    {
+        if (currentUser is null || selectedClient is null || followUpServiceId == 0 || followUpHour == 0)
+        {
+            return;
+        }
+
+        var service = services.First(s => s.Id == followUpServiceId);
+        var startTime = followUpDate.Date.AddHours(followUpHour);
+
+        Db.Appointments.Add(new Appointment
+        {
+            ClientId = selectedClient.Id,
+            ServiceId = service.Id,
+            ProviderId = currentUser.Id,
+            StartTime = startTime,
+            EndTime = startTime.AddMinutes(service.DurationMinutes),
+            CreatedAt = DateTime.UtcNow,
+            Price = service.Price,
+            Status = "Upcoming",
+        });
+        await Db.SaveChangesAsync();
+
+        followUpBooked = true;
+        followUpServiceId = 0;
+        followUpHour = 0;
+    }
+
+    private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
 
     private class NewNoteModel
     {
