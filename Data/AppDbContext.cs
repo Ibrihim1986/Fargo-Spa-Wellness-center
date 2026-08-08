@@ -69,6 +69,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(f => f.ClientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<ServiceNote>()
             .HasOne<User>()
             .WithMany()
