@@ -35,6 +35,11 @@ builder.Services.AddCascadingAuthenticationState();
 // Register ExportService
 builder.Services.AddScoped<ExportService>();
 builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
+// Staff management service
+builder.Services.AddScoped<StaffService>();
+// Pricing service for tiered and provider-specific pricing
+builder.Services.AddScoped<PricingService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

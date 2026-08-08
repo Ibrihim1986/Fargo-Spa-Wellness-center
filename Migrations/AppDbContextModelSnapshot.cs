@@ -29,23 +29,17 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("DependentId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<DateTime>("EndTime")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsPaid")
-                        .HasColumnType("INTEGER");
+                    b.Property<Guid?>("GroupBookingId")
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal>("Price")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("ProviderId")
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("ProviderNotes")
-                        .HasColumnType("TEXT");
 
                     b.Property<int>("ServiceId")
                         .HasColumnType("INTEGER");
@@ -68,214 +62,30 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.ToTable("Appointments");
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ApprovalRequest", b =>
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ClientHealthFlag", b =>
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("EntityId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Payload")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("RequestedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RequestedByEmail")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("RequestedById")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ReviewComment")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("ReviewedById")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("ApprovalRequests");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Dependent", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateOnly>("DateOfBirth")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FirstName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("GuardianUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("LastName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GuardianUserId");
-
-                    b.ToTable("Dependents");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Fee", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<decimal>("Amount")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("AppointmentId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ClientId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTime>("CreatedAt")
+                    b.Property<string>("Details")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Reason")
+                    b.Property<string>("FlagType")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("WaivedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("WaivedByName")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Fees");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.GiftCard", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("CurrentBalance")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("InitialBalance")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("IssuedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PurchaserEmail")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RecipientEmail")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Code")
-                        .IsUnique();
-
-                    b.ToTable("GiftCards");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.GuardianConsent", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int?>("AppointmentId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("DependentId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("GuardianSignatureName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("GuardianUserId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ServiceId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("SignedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DependentId");
-
-                    b.ToTable("GuardianConsents");
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Membership", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime?>("EndDate")
                         .HasColumnType("TEXT");
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTime?>("LastRenewedDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PlanName")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("StartDate")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
+                    b.HasIndex("ClientId");
 
-                    b.ToTable("Memberships");
+                    b.ToTable("ClientHealthFlags");
                 });
 
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.ProviderAvailability", b =>
@@ -303,43 +113,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.ToTable("ProviderAvailabilities");
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.SavedCard", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Brand")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("ExpiryMonth")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("ExpiryYear")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Last4")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Token")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("SavedCards");
-                });
-
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.Service", b =>
                 {
                     b.Property<int>("Id")
@@ -360,9 +133,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("MinimumAge")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -370,12 +140,52 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.Property<decimal>("Price")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("RequiresWaiver")
+                    b.Property<int?>("RequiredPriorSessionCount")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequiresWaiverType")
+                        .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.ToTable("Services");
+                });
+
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ServiceNote", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AppointmentId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ClientId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NoteType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ProviderId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AppointmentId");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("ProviderId");
+
+                    b.ToTable("ServiceNotes");
                 });
 
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.ServicePricingTier", b =>
@@ -388,6 +198,9 @@ namespace Family_and_Spa_Wellness.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("MaxAge")
                         .HasColumnType("INTEGER");
 
                     b.Property<decimal>("Price")
@@ -406,6 +219,80 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.HasIndex("ServiceId");
 
                     b.ToTable("ServicePricingTiers");
+                });
+
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Staff", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Role")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Staff");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "alice@fargospa.com",
+                            FirstName = "Alice",
+                            IsActive = true,
+                            LastName = "Manager",
+                            Role = 1
+                        },
+                        new
+                        {
+                            Id = 2,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "bob@fargospa.com",
+                            FirstName = "Bob",
+                            IsActive = true,
+                            LastName = "Reception",
+                            Role = 2
+                        },
+                        new
+                        {
+                            Id = 3,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "carol@fargospa.com",
+                            FirstName = "Carol",
+                            IsActive = true,
+                            LastName = "Therapist",
+                            Role = 3
+                        },
+                        new
+                        {
+                            Id = 4,
+                            CreatedAt = new DateTime(2026, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc),
+                            Email = "dave@fargospa.com",
+                            FirstName = "Dave",
+                            IsActive = false,
+                            LastName = "Viewer",
+                            Role = 4
+                        });
                 });
 
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.Testimonial", b =>
@@ -443,49 +330,6 @@ namespace Family_and_Spa_Wellness.Migrations
                     b.ToTable("Testimonials");
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Transaction", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("AppointmentId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("GiftCardAmountApplied")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("GiftCardId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("PaymentMethod")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int?>("ProviderId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("ReceiptNumber")
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("ServiceAmount")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<decimal>("TipAmount")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Transactions");
-                });
-
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -496,6 +340,9 @@ namespace Family_and_Spa_Wellness.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DateOfBirth")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Email")
@@ -510,16 +357,15 @@ namespace Family_and_Spa_Wellness.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("NotificationChannel")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("PasswordHash")
                         .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Phone")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Preferences")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Role")
@@ -543,22 +389,22 @@ namespace Family_and_Spa_Wellness.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("Allergies")
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("ClientId")
                         .HasColumnType("INTEGER");
 
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("MedicalConditions")
-                        .HasColumnType("TEXT");
+                    b.Property<bool>("IsSigned")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("SignedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("WaiverType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
 
                     b.ToTable("Waivers");
                 });
@@ -583,33 +429,13 @@ namespace Family_and_Spa_Wellness.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Dependent", b =>
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ClientHealthFlag", b =>
                 {
                     b.HasOne("Family_and_Spa_Wellness.Models.User", null)
                         .WithMany()
-                        .HasForeignKey("GuardianUserId")
+                        .HasForeignKey("ClientId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.GuardianConsent", b =>
-                {
-                    b.HasOne("Family_and_Spa_Wellness.Models.Dependent", null)
-                        .WithMany()
-                        .HasForeignKey("DependentId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Membership", b =>
-                {
-                    b.HasOne("Family_and_Spa_Wellness.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Family_and_Spa_Wellness.Models.ProviderAvailability", b =>
@@ -621,12 +447,23 @@ namespace Family_and_Spa_Wellness.Migrations
                         .IsRequired();
                 });
 
-            modelBuilder.Entity("Family_and_Spa_Wellness.Models.SavedCard", b =>
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.ServiceNote", b =>
                 {
+                    b.HasOne("Family_and_Spa_Wellness.Models.Appointment", null)
+                        .WithMany()
+                        .HasForeignKey("AppointmentId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Family_and_Spa_Wellness.Models.User", null)
                         .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Family_and_Spa_Wellness.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("ProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -659,6 +496,15 @@ namespace Family_and_Spa_Wellness.Migrations
                         .WithMany()
                         .HasForeignKey("ServiceId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("Family_and_Spa_Wellness.Models.Waiver", b =>
+                {
+                    b.HasOne("Family_and_Spa_Wellness.Models.User", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

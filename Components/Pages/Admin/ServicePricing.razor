@@ -143,6 +143,21 @@
         Db.ApprovalRequests.Add(req);
         await Db.SaveChangesAsync();
 
+        if (editTier.Id == 0)
+        {
+            Db.Set<ServicePricingTier>().Add(editTier);
+        }
+        else
+        {
+            var dbTier = await Db.Set<ServicePricingTier>().FindAsync(editTier.Id);
+            if (dbTier is null) return;
+            dbTier.DurationMinutes = editTier.DurationMinutes;
+            dbTier.Price = editTier.Price;
+            dbTier.ProviderId = editTier.ProviderId;
+            dbTier.IsActive = editTier.IsActive;
+        }
+
+        await Db.SaveChangesAsync();
         currentPricing = await Db.Set<ServicePricingTier>().Where(t => t.ServiceId == ServiceId).ToListAsync();
         editTier = null;
     }

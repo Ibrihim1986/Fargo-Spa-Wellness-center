@@ -21,4 +21,8 @@ public class Appointment
 
     // US-704/905-style bookkeeping: whether checkout/payment has been completed
     public bool IsPaid { get; set; }
+    public string Status { get; set; } = "Upcoming"; // Upcoming/CheckedIn/Completed/NoShow/Cancelled
+
+    // US-712: shared by the two linked appointments in a couples/side-by-side booking (null = not a group booking)
+    public Guid? GroupBookingId { get; set; }
 }

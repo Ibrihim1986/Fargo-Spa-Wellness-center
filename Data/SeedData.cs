@@ -15,6 +15,9 @@ public static class SeedData
         await SeedUsersAsync(db, configuration);
         await SeedAppointmentsAsync(db);
         await SeedTestimonialsAsync(db);
+        await SeedWaiversAsync(db);
+        await SeedHealthFlagsAsync(db);
+        await SeedKidsPricingTierAsync(db);
     }
 
     private static async Task SeedServicesAsync(AppDbContext db)
@@ -38,6 +41,7 @@ public static class SeedData
                 DurationMinutes = 60,
                 Price = 0m,
                 IsActive = true,
+                RequiresWaiverType = "MassageIntake",
             },
             new()
             {
@@ -83,6 +87,7 @@ public static class SeedData
                 DurationMinutes = 35,
                 Price = 0m,
                 IsActive = true,
+                RequiredPriorSessionCount = 1,
             },
             new()
             {
@@ -101,6 +106,7 @@ public static class SeedData
                 DurationMinutes = 15,
                 Price = 99m,
                 IsActive = true,
+                RequiresWaiverType = "MedicalIntake",
             },
             new()
             {
@@ -170,6 +176,8 @@ public static class SeedData
             NewSeedUser("Sarah", "Mitchell", "sarah.mitchell@example.com", "701-555-0201", "Client"),
             NewSeedUser("James", "Carter", "james.carter@example.com", "701-555-0202", "Client"),
             NewSeedUser("Maria", "Gonzalez", "maria.gonzalez@example.com", "701-555-0203", "Client"),
+            // US-603: a child client, to demonstrate the kids' pricing tier
+            NewSeedUser("Ben", "Mitchell", "ben.mitchell@example.com", "701-555-0204", "Client", dateOfBirth: DateTime.Today.AddYears(-9)),
 
             // Testimonial authors
             NewSeedUser("Jessica", "Turner", "jessica.turner@example.com", "701-555-0301", "Client"),
@@ -204,7 +212,7 @@ public static class SeedData
             await db.SaveChangesAsync();
         }
 
-        User NewSeedUser(string firstName, string lastName, string email, string phone, string role, string? title = null, string? bio = null)
+        User NewSeedUser(string firstName, string lastName, string email, string phone, string role, string? title = null, string? bio = null, DateTime? dateOfBirth = null)
         {
             return new User
             {
@@ -215,6 +223,7 @@ public static class SeedData
                 Role = role,
                 Title = title,
                 Bio = bio,
+                DateOfBirth = dateOfBirth,
                 PasswordHash = SeedPasswordHash,
                 CreatedAt = DateTime.UtcNow,
             };
@@ -384,6 +393,94 @@ public static class SeedData
         };
 
         db.Testimonials.AddRange(testimonials);
+        await db.SaveChangesAsync();
+    }
+
+    // US-405: a couple of clients with a waiver on file and one without, so the missing-waiver alert is demonstrable
+    private static async Task SeedWaiversAsync(AppDbContext db)
+    {
+        if (await db.Waivers.AnyAsync())
+        {
+            return;
+        }
+
+        var users = await db.Users.ToDictionaryAsync(u => u.Email);
+
+        var waivers = new[]
+        {
+            new Waiver
+            {
+                ClientId = users["sarah.mitchell@example.com"].Id,
+                WaiverType = "MassageIntake",
+                IsSigned = true,
+                SignedAt = new DateTime(2026, 6, 1),
+            },
+            new Waiver
+            {
+                ClientId = users["maria.gonzalez@example.com"].Id,
+                WaiverType = "MedicalIntake",
+                IsSigned = true,
+                SignedAt = new DateTime(2026, 6, 15),
+            },
+            // James Carter intentionally has no MassageIntake waiver on file, to demonstrate the alert.
+        };
+
+        db.Waivers.AddRange(waivers);
+        await db.SaveChangesAsync();
+    }
+
+    // US-503: a couple of clients with active health flags, so the badge is demonstrable on the schedule view
+    private static async Task SeedHealthFlagsAsync(AppDbContext db)
+    {
+        if (await db.ClientHealthFlags.AnyAsync())
+        {
+            return;
+        }
+
+        var users = await db.Users.ToDictionaryAsync(u => u.Email);
+
+        var flags = new[]
+        {
+            new ClientHealthFlag
+            {
+                ClientId = users["james.carter@example.com"].Id,
+                FlagType = "Allergy",
+                Details = "Sensitive to almond and coconut-based massage oils — use fragrance-free lotion.",
+                IsActive = true,
+            },
+            new ClientHealthFlag
+            {
+                ClientId = users["maria.gonzalez@example.com"].Id,
+                FlagType = "BloodThinner",
+                Details = "Client is on a blood-thinning medication — expect increased bruising risk with injectables.",
+                IsActive = true,
+            },
+        };
+
+        db.ClientHealthFlags.AddRange(flags);
+        await db.SaveChangesAsync();
+    }
+
+    // US-603: a discounted kids' tier on Customized Facial, so the pricing rule is demonstrable when booking as Ben Mitchell
+    private static async Task SeedKidsPricingTierAsync(AppDbContext db)
+    {
+        if (await db.Set<ServicePricingTier>().AnyAsync())
+        {
+            return;
+        }
+
+        var facial = await db.Services.FirstAsync(s => s.Name == "Customized Facial");
+
+        db.Set<ServicePricingTier>().Add(new ServicePricingTier
+        {
+            ServiceId = facial.Id,
+            ProviderId = null,
+            DurationMinutes = facial.DurationMinutes,
+            Price = 20m,
+            MaxAge = 12,
+            IsActive = true,
+        });
+
         await db.SaveChangesAsync();
     }
 }

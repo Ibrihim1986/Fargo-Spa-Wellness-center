@@ -1,21 +1,73 @@
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.EntityFrameworkCore
 @inject AuthenticationStateProvider AuthStateProvider
+@inject AppDbContext Db
 
+<!-- US-706: manage profile with contact info and preferences -->
 <div class="profile-form">
-    <p><strong>Name:</strong> @name</p>
-    <p><strong>Email:</strong> @email</p>
-    <p>Profile editing is coming soon.</p>
+    @if (currentUser is null)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        @if (saved)
+        {
+            <p class="text-sage">Profile updated.</p>
+        }
+        <EditForm Model="currentUser" OnValidSubmit="SaveAsync">
+            <div class="mb-2">
+                <label class="form-label">Email</label>
+                <input class="form-control" value="@currentUser.Email" disabled />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">First Name</label>
+                <InputText class="form-control" @bind-Value="currentUser.FirstName" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Last Name</label>
+                <InputText class="form-control" @bind-Value="currentUser.LastName" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Phone</label>
+                <InputText class="form-control" @bind-Value="currentUser.Phone" />
+            </div>
+            <div class="mb-2">
+                <label class="form-label">Preferences</label>
+                <InputTextArea class="form-control" rows="3" placeholder="e.g. preferred pressure, scent, room temperature" @bind-Value="currentUser.Preferences" />
+            </div>
+            <button type="submit" class="btn btn-primary">Save Profile</button>
+        </EditForm>
+    }
 </div>
 
 @code {
-    private string? name;
-    private string? email;
+    private User? currentUser;
+    private bool saved;
 
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
-        var user = authState.User;
-        name = user.Identity?.Name;
-        email = user.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        var email = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+    }
+
+    // US-706: persist contact info and preference changes
+    private async Task SaveAsync()
+    {
+        if (currentUser is null)
+        {
+            return;
+        }
+
+        Db.Users.Update(currentUser);
+        await Db.SaveChangesAsync();
+        saved = true;
     }
 }

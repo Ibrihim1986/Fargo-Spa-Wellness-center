@@ -1,0 +1,82 @@
+@page "/user-management"
+@using Family_and_Spa_Wellness.Models
+@inject Family_and_Spa_Wellness.Services.StaffService StaffService
+
+<h3>Staff Management</h3>
+
+@if (staffList is null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Active</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var s in staffList)
+            {
+                <tr>
+                    <td>@(s.FirstName) @(s.LastName)</td>
+                    <td>@s.Email</td>
+                    <td>
+                        <select class="form-select" @onchange="async e => await ChangeRole(s.Id, e.Value?.ToString())">
+                            @foreach (var r in Enum.GetValues<Role>())
+                            {
+                                <option value="@r" selected="@(r==s.Role)">@r</option>
+                            }
+                        </select>
+                    </td>
+                    <td>
+                        <input type="checkbox" checked="@s.IsActive" @onchange="async e => await ToggleActive(s.Id, ((ChangeEventArgs)e).Value)" />
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-danger" @onclick="() => Remove(s.Id)">Remove</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private List<Staff>? staffList;
+
+    protected override async Task OnInitializedAsync()
+    {
+        staffList = await StaffService.GetAllAsync();
+    }
+
+    private async Task ChangeRole(int id, string? roleValue)
+    {
+        if (string.IsNullOrEmpty(roleValue)) return;
+        if (!Enum.TryParse<Role>(roleValue, out var newRole)) return;
+        await StaffService.UpdateRoleAsync(id, newRole);
+        staffList = await StaffService.GetAllAsync();
+        StateHasChanged();
+    }
+
+    private async Task ToggleActive(int id, object? rawValue)
+    {
+        // rawValue is "on" for checkbox; we read current staff state and toggle instead
+        var s = staffList?.FirstOrDefault(x => x.Id == id);
+        if (s == null) return;
+        await StaffService.SetActiveAsync(id, !s.IsActive);
+        staffList = await StaffService.GetAllAsync();
+        StateHasChanged();
+    }
+
+    private async Task Remove(int id)
+    {
+        await StaffService.DeleteAsync(id);
+        staffList = await StaffService.GetAllAsync();
+        StateHasChanged();
+    }
+}

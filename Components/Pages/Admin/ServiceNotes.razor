@@ -1,14 +1,229 @@
 @page "/admin/service-notes"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize(Roles = "Admin,Provider")]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-403, US-502: view client health notes/preferences before a session -->
 <PageTitle>Service Notes - Admin</PageTitle>
 
 <h1>Service Notes</h1>
-<p>Coming soon: staff notes on client service history and preferences.</p>
 
-<p>
-    <span class="badge-featured">Guardian Consent Required</span>
-    <span class="text-muted ms-2">Example badge for flagging child clients requiring guardian consent.</span>
-</p>
-@((MarkupString)"<!-- US-603: Flag child clients requiring guardian consent -->")
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else if (ClientId is null)
+{
+    <p class="text-sage">Select a client to view or add service notes.</p>
+    <div class="d-flex flex-column gap-1">
+        @foreach (var client in clients)
+        {
+            <a href="@($"/admin/service-notes?clientId={client.Id}")">@client.FullName</a>
+        }
+    </div>
+}
+else if (selectedClient is null)
+{
+    <p class="text-danger">Client not found.</p>
+}
+else
+{
+    <h2 class="h4">@selectedClient.FullName</h2>
+    <p class="text-sage">@selectedClient.Email &middot; @selectedClient.Phone</p>
+
+    <h3 class="h6 mt-4">Existing Notes</h3>
+    @if (existingNotes.Count == 0)
+    {
+        <p class="text-sage">No notes on file for this client yet.</p>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2 mb-4">
+            @foreach (var note in existingNotes)
+            {
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="status-badge">@note.NoteType</span>
+                            <span class="text-sage small">@note.CreatedAt.ToString("MMM d, yyyy")</span>
+                        </div>
+                        <p class="mb-0 mt-2">@note.Content</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- US-404, US-502, US-602: add treatment/skin-condition/nail-art notes after a session -->
+    <h3 class="h6 mt-4">Add a Note</h3>
+    <EditForm Model="newNote" OnValidSubmit="AddNoteAsync">
+        <div class="mb-2">
+            <label class="form-label">Note Type</label>
+            <InputSelect class="form-select" @bind-Value="newNote.NoteType">
+                <option value="TreatmentNote">Treatment Note</option>
+                <option value="SkinCondition">Skin Condition</option>
+                <option value="ProductUsage">Product Usage</option>
+                <option value="NailArtDetail">Nail Art Detail</option>
+                <option value="Preference">Preference</option>
+                <option value="General">General</option>
+            </InputSelect>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Details</label>
+            <InputTextArea class="form-control" rows="3" @bind-Value="newNote.Content" />
+        </div>
+        <button type="submit" class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(newNote.Content)">Save Note</button>
+    </EditForm>
+
+    <!-- US-504: provider recommends/schedules a follow-up directly from a client's record -->
+    <h3 class="h6 mt-4">Schedule a Follow-up</h3>
+    @if (followUpBooked)
+    {
+        <p class="text-sage">Follow-up scheduled for @confirmedFollowUpDate.ToString("MMM d, yyyy") at @FormatHour(confirmedFollowUpHour).</p>
+    }
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+        <select class="form-select w-auto" @bind="followUpServiceId">
+            <option value="0">Select a service</option>
+            @foreach (var service in services)
+            {
+                <option value="@service.Id">@service.Name</option>
+            }
+        </select>
+        <input type="date" class="form-control w-auto" @bind="followUpDate" @bind:format="yyyy-MM-dd" />
+    </div>
+    <div class="d-flex flex-wrap gap-2 mb-2">
+        @foreach (var hour in AvailabilityHours)
+        {
+            <button class="btn btn-sm @(followUpHour == hour ? "btn-primary" : "btn-outline-secondary")" @onclick="() => followUpHour = hour">
+                @FormatHour(hour)
+            </button>
+        }
+    </div>
+    <button class="btn btn-primary" disabled="@(followUpServiceId == 0 || followUpHour == 0)" @onclick="ScheduleFollowUpAsync">Schedule Follow-up</button>
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? ClientId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int? AppointmentId { get; set; }
+
+    private User? currentUser;
+    private List<User> clients = [];
+    private User? selectedClient;
+    private List<ServiceNote> existingNotes = [];
+    private NewNoteModel newNote = new();
+    private List<Service> services = [];
+    private int followUpServiceId;
+    private DateTime followUpDate = DateTime.Today.AddDays(7);
+    private int followUpHour;
+    private bool followUpBooked;
+    private DateTime confirmedFollowUpDate;
+    private int confirmedFollowUpHour;
+
+    private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        services = await Db.Services.Where(s => s.IsActive).OrderBy(s => s.Name).ToListAsync();
+
+        if (ClientId is null)
+        {
+            clients = await Db.Users.Where(u => u.Role == "Client").OrderBy(u => u.LastName).ToListAsync();
+            return;
+        }
+
+        await LoadClientAsync();
+    }
+
+    // US-403, US-502: pull a client's existing notes/preferences so a provider can review them before a session
+    private async Task LoadClientAsync()
+    {
+        selectedClient = await Db.Users.FindAsync(ClientId);
+        if (selectedClient is null)
+        {
+            return;
+        }
+
+        existingNotes = await Db.ServiceNotes
+            .Where(n => n.ClientId == ClientId)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync();
+    }
+
+    // US-404, US-502, US-602: record a treatment/skin-condition/nail-art/preference note after a session
+    private async Task AddNoteAsync()
+    {
+        if (currentUser is null || selectedClient is null || string.IsNullOrWhiteSpace(newNote.Content))
+        {
+            return;
+        }
+
+        Db.ServiceNotes.Add(new ServiceNote
+        {
+            ClientId = selectedClient.Id,
+            ProviderId = currentUser.Id,
+            AppointmentId = AppointmentId,
+            NoteType = newNote.NoteType,
+            Content = newNote.Content.Trim(),
+            CreatedAt = DateTime.UtcNow,
+        });
+        await Db.SaveChangesAsync();
+
+        newNote = new NewNoteModel();
+        await LoadClientAsync();
+    }
+
+    // US-504: create a follow-up appointment for this client with the current provider
+    private async Task ScheduleFollowUpAsync()
+    {
+        if (currentUser is null || selectedClient is null || followUpServiceId == 0 || followUpHour == 0)
+        {
+            return;
+        }
+
+        var service = services.First(s => s.Id == followUpServiceId);
+        var startTime = followUpDate.Date.AddHours(followUpHour);
+
+        Db.Appointments.Add(new Appointment
+        {
+            ClientId = selectedClient.Id,
+            ServiceId = service.Id,
+            ProviderId = currentUser.Id,
+            StartTime = startTime,
+            EndTime = startTime.AddMinutes(service.DurationMinutes),
+            CreatedAt = DateTime.UtcNow,
+            Price = service.Price,
+            Status = "Upcoming",
+        });
+        await Db.SaveChangesAsync();
+
+        confirmedFollowUpDate = followUpDate;
+        confirmedFollowUpHour = followUpHour;
+        followUpBooked = true;
+        followUpServiceId = 0;
+        followUpHour = 0;
+    }
+
+    private static string FormatHour(int hour) => new DateTime(1, 1, 1, hour, 0, 0).ToString("h tt");
+
+    private class NewNoteModel
+    {
+        public string NoteType { get; set; } = "General";
+        public string Content { get; set; } = "";
+    }
+}

@@ -13,4 +13,7 @@ public class Waiver
 
     public bool IsSigned => SignedAt.HasValue;
     public bool IsExpired => ExpiresAt.HasValue && ExpiresAt.Value < DateTime.UtcNow;
+    public string WaiverType { get; set; } = "General";
+    public bool IsSigned { get; set; }
+    public DateTime? SignedAt { get; set; }
 }
