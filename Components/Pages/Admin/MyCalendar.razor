@@ -20,6 +20,41 @@
 }
 else
 {
+    <div class="d-flex flex-column gap-2 mb-5">
+        @if (upcomingAppointments.Count == 0)
+        {
+            <p class="text-sage">No upcoming appointments.</p>
+        }
+        @foreach (var row in upcomingAppointments)
+        {
+            <div class="card">
+                <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                    <div class="booking-time">
+                        <div class="fw-semibold">@row.Appointment.StartTime.ToString("MMM d, h:mm tt")</div>
+                        <span class="status-badge">@row.Appointment.Status</span>
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="fw-semibold">@row.Client?.FullName</div>
+                        <div class="text-sage small">@row.Service?.Name — @row.Client?.Phone</div>
+                        @if (missingWaiverAppointmentIds.Contains(row.Appointment.Id))
+                        {
+                            <!-- US-405: alert if a client hasn't completed a required waiver -->
+                            <span class="badge-featured mt-1 d-inline-block">⚠ Waiver not on file</span>
+                        }
+                        @if (row.Client is not null && healthFlagsByClient.TryGetValue(row.Client.Id, out var flags))
+                        {
+                            <!-- US-503: flag health conditions relevant to a treatment -->
+                            @foreach (var flag in flags)
+                            {
+                                <span class="badge-featured mt-1 d-inline-block" title="@flag.Details">⚠ @flag.FlagType</span>
+                            }
+                        }
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-sm btn-outline-primary" @onclick="() => CompleteAppointment(row.Appointment)">Complete</button>
+                        <button class="btn btn-sm btn-outline-secondary" disabled title="Coming soon">Note</button>
+                    </div>
+                </div>
     RenderFragment<BookingRow> AppointmentCard = row => @<div class="card">
         <div class="card-body d-flex flex-wrap align-items-center gap-3">
             <div class="booking-time">
@@ -118,6 +153,11 @@ else
 
 @code {
     private User? provider;
+    private List<BookingRow> upcomingAppointments = [];
+    private HashSet<int> bookedHoursToday = [];
+    private HashSet<int> unavailableHoursToday = [];
+    private HashSet<int> missingWaiverAppointmentIds = [];
+    private Dictionary<int, List<ClientHealthFlag>> healthFlagsByClient = [];
     private List<BookingRow> weekAppointments = [];
     private DateTime availabilityDate = DateTime.Today;
     private HashSet<int> bookedHoursForDay = [];
@@ -165,6 +205,11 @@ else
             .Select(a => new BookingRow(a, users.GetValueOrDefault(a.ClientId), services.GetValueOrDefault(a.ServiceId)))
             .ToList();
 
+        await LoadMissingWaiversAsync();
+        await LoadHealthFlagsAsync();
+
+        bookedHoursToday = appointments
+            .Where(a => a.StartTime.Date == DateTime.Today)
         // US-402: availability grid tracks whichever day is currently selected, not just today
         availabilityDate = selectedDate;
 
@@ -181,6 +226,53 @@ else
             .ToHashSet();
     }
 
+    // US-405: flag appointments whose service requires a waiver type the client hasn't signed
+    private async Task LoadMissingWaiversAsync()
+    {
+        var requiredByAppointment = upcomingAppointments
+            .Where(r => r.Client is not null && !string.IsNullOrEmpty(r.Service?.RequiresWaiverType))
+            .ToList();
+
+        if (requiredByAppointment.Count == 0)
+        {
+            missingWaiverAppointmentIds = [];
+            return;
+        }
+
+        var clientIds = requiredByAppointment.Select(r => r.Client!.Id).ToHashSet();
+        var signedWaivers = await Db.Waivers
+            .Where(w => w.IsSigned && clientIds.Contains(w.ClientId))
+            .Select(w => new { w.ClientId, w.WaiverType })
+            .ToListAsync();
+        var signedSet = signedWaivers.Select(w => (w.ClientId, w.WaiverType)).ToHashSet();
+
+        missingWaiverAppointmentIds = requiredByAppointment
+            .Where(r => !signedSet.Contains((r.Client!.Id, r.Service!.RequiresWaiverType!)))
+            .Select(r => r.Appointment.Id)
+            .ToHashSet();
+    }
+
+    // US-503: surface active health flags for clients on the provider's schedule
+    private async Task LoadHealthFlagsAsync()
+    {
+        var clientIds = upcomingAppointments
+            .Where(r => r.Client is not null)
+            .Select(r => r.Client!.Id)
+            .ToHashSet();
+
+        if (clientIds.Count == 0)
+        {
+            healthFlagsByClient = [];
+            return;
+        }
+
+        var flags = await Db.ClientHealthFlags
+            .Where(f => f.IsActive && clientIds.Contains(f.ClientId))
+            .ToListAsync();
+
+        healthFlagsByClient = flags
+            .GroupBy(f => f.ClientId)
+            .ToDictionary(g => g.Key, g => g.ToList());
     // US-401, US-501, US-601: appointments on the provider's schedule for a given day (used by both Day and Week views)
     private IEnumerable<BookingRow> DaySchedule(DateTime day) =>
         weekAppointments.Where(r => r.Appointment.StartTime.Date == day.Date).OrderBy(r => r.Appointment.StartTime);

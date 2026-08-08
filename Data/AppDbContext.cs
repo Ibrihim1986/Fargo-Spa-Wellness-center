@@ -13,6 +13,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
     public DbSet<Staff> Staff => Set<Staff>();
+    public DbSet<Waiver> Waivers => Set<Waiver>();
+    public DbSet<ClientHealthFlag> ClientHealthFlags => Set<ClientHealthFlag>();
     public DbSet<ServiceNote> ServiceNotes => Set<ServiceNote>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -57,6 +59,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasForeignKey(a => a.ProviderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<Waiver>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(w => w.ClientId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<ClientHealthFlag>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(f => f.ClientId)
         modelBuilder.Entity<ServiceNote>()
             .HasOne<User>()
             .WithMany()

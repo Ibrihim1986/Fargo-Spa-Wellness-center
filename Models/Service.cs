@@ -9,4 +9,7 @@ public class Service
     public int DurationMinutes { get; set; }
     public decimal Price { get; set; }
     public bool IsActive { get; set; }
+
+    // US-405: waiver type a client must have signed before this service can be performed (null = none required)
+    public string? RequiresWaiverType { get; set; }
 }

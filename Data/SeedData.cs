@@ -15,6 +15,8 @@ public static class SeedData
         await SeedUsersAsync(db, configuration);
         await SeedAppointmentsAsync(db);
         await SeedTestimonialsAsync(db);
+        await SeedWaiversAsync(db);
+        await SeedHealthFlagsAsync(db);
     }
 
     private static async Task SeedServicesAsync(AppDbContext db)
@@ -38,6 +40,7 @@ public static class SeedData
                 DurationMinutes = 60,
                 Price = 0m,
                 IsActive = true,
+                RequiresWaiverType = "MassageIntake",
             },
             new()
             {
@@ -101,6 +104,7 @@ public static class SeedData
                 DurationMinutes = 15,
                 Price = 99m,
                 IsActive = true,
+                RequiresWaiverType = "MedicalIntake",
             },
             new()
             {
@@ -384,6 +388,71 @@ public static class SeedData
         };
 
         db.Testimonials.AddRange(testimonials);
+        await db.SaveChangesAsync();
+    }
+
+    // US-405: a couple of clients with a waiver on file and one without, so the missing-waiver alert is demonstrable
+    private static async Task SeedWaiversAsync(AppDbContext db)
+    {
+        if (await db.Waivers.AnyAsync())
+        {
+            return;
+        }
+
+        var users = await db.Users.ToDictionaryAsync(u => u.Email);
+
+        var waivers = new[]
+        {
+            new Waiver
+            {
+                ClientId = users["sarah.mitchell@example.com"].Id,
+                WaiverType = "MassageIntake",
+                IsSigned = true,
+                SignedAt = new DateTime(2026, 6, 1),
+            },
+            new Waiver
+            {
+                ClientId = users["maria.gonzalez@example.com"].Id,
+                WaiverType = "MedicalIntake",
+                IsSigned = true,
+                SignedAt = new DateTime(2026, 6, 15),
+            },
+            // James Carter intentionally has no MassageIntake waiver on file, to demonstrate the alert.
+        };
+
+        db.Waivers.AddRange(waivers);
+        await db.SaveChangesAsync();
+    }
+
+    // US-503: a couple of clients with active health flags, so the badge is demonstrable on the schedule view
+    private static async Task SeedHealthFlagsAsync(AppDbContext db)
+    {
+        if (await db.ClientHealthFlags.AnyAsync())
+        {
+            return;
+        }
+
+        var users = await db.Users.ToDictionaryAsync(u => u.Email);
+
+        var flags = new[]
+        {
+            new ClientHealthFlag
+            {
+                ClientId = users["james.carter@example.com"].Id,
+                FlagType = "Allergy",
+                Details = "Sensitive to almond and coconut-based massage oils — use fragrance-free lotion.",
+                IsActive = true,
+            },
+            new ClientHealthFlag
+            {
+                ClientId = users["maria.gonzalez@example.com"].Id,
+                FlagType = "BloodThinner",
+                Details = "Client is on a blood-thinning medication — expect increased bruising risk with injectables.",
+                IsActive = true,
+            },
+        };
+
+        db.ClientHealthFlags.AddRange(flags);
         await db.SaveChangesAsync();
     }
 }
