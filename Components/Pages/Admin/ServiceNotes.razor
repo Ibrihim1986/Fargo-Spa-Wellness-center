@@ -1,14 +1,108 @@
 @page "/admin/service-notes"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
-@attribute [Authorize(Roles = "Admin")]
+@attribute [Authorize(Roles = "Admin,Provider")]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-403, US-502: view client health notes/preferences before a session -->
 <PageTitle>Service Notes - Admin</PageTitle>
 
 <h1>Service Notes</h1>
-<p>Coming soon: staff notes on client service history and preferences.</p>
 
-<p>
-    <span class="badge-featured">Guardian Consent Required</span>
-    <span class="text-muted ms-2">Example badge for flagging child clients requiring guardian consent.</span>
-</p>
-@((MarkupString)"<!-- US-603: Flag child clients requiring guardian consent -->")
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else if (ClientId is null)
+{
+    <p class="text-sage">Select a client to view service notes.</p>
+    <div class="d-flex flex-column gap-1">
+        @foreach (var client in clients)
+        {
+            <a href="@($"/admin/service-notes?clientId={client.Id}")">@client.FullName</a>
+        }
+    </div>
+}
+else if (selectedClient is null)
+{
+    <p class="text-danger">Client not found.</p>
+}
+else
+{
+    <h2 class="h4">@selectedClient.FullName</h2>
+    <p class="text-sage">@selectedClient.Email &middot; @selectedClient.Phone</p>
+
+    <h3 class="h6 mt-4">Existing Notes</h3>
+    @if (existingNotes.Count == 0)
+    {
+        <p class="text-sage">No notes on file for this client yet.</p>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2 mb-4">
+            @foreach (var note in existingNotes)
+            {
+                <div class="card">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="status-badge">@note.NoteType</span>
+                            <span class="text-sage small">@note.CreatedAt.ToString("MMM d, yyyy")</span>
+                        </div>
+                        <p class="mb-0 mt-2">@note.Content</p>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? ClientId { get; set; }
+
+    [SupplyParameterFromQuery]
+    public int? AppointmentId { get; set; }
+
+    private User? currentUser;
+    private List<User> clients = [];
+    private User? selectedClient;
+    private List<ServiceNote> existingNotes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        if (ClientId is null)
+        {
+            clients = await Db.Users.Where(u => u.Role == "Client").OrderBy(u => u.LastName).ToListAsync();
+            return;
+        }
+
+        await LoadClientAsync();
+    }
+
+    // US-403, US-502: pull a client's existing notes/preferences so a provider can review them before a session
+    private async Task LoadClientAsync()
+    {
+        selectedClient = await Db.Users.FindAsync(ClientId);
+        if (selectedClient is null)
+        {
+            return;
+        }
+
+        existingNotes = await Db.ServiceNotes
+            .Where(n => n.ClientId == ClientId)
+            .OrderByDescending(n => n.CreatedAt)
+            .ToListAsync();
+    }
+}
