@@ -12,5 +12,6 @@ public class User
     public DateTime CreatedAt { get; set; }
     public string? Title { get; set; } // Provider job title, e.g. "Massage Therapist"
     public string? Bio { get; set; } // Provider bio/specialties
+    public string? Preferences { get; set; } // US-706: client preferences (e.g. preferred pressure, scent, room temperature)
     public string FullName => $"{FirstName} {LastName}";
 }
