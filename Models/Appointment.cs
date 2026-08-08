@@ -11,4 +11,7 @@ public class Appointment
     public DateTime CreatedAt { get; set; }
     public decimal Price { get; set; }
     public string Status { get; set; } = "Upcoming"; // Upcoming/CheckedIn/Completed/NoShow/Cancelled
+
+    // US-712: shared by the two linked appointments in a couples/side-by-side booking (null = not a group booking)
+    public Guid? GroupBookingId { get; set; }
 }
