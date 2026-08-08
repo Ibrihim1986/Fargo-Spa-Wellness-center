@@ -1,0 +1,162 @@
+@page "/admin/customers"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+
+<!-- US-306: Receptionist looks up a customer's profile and history -->
+<PageTitle>Customers - Admin</PageTitle>
+
+<h1>Customer Lookup</h1>
+
+<div class="mb-3">
+    <input class="form-control" style="max-width:420px;" placeholder="Search by name, phone, or email"
+           @bind="searchTerm" @bind:event="oninput" @onkeyup="Search" />
+</div>
+
+@if (selectedClient is null)
+{
+    @if (searchResults is not null)
+    {
+        @if (!searchResults.Any())
+        {
+            <p class="text-sage">No matching customers.</p>
+        }
+        else
+        {
+            <div class="d-flex flex-column gap-2">
+                @foreach (var c in searchResults)
+                {
+                    <div class="card">
+                        <div class="card-body d-flex justify-content-between align-items-center">
+                            <div>
+                                <div class="fw-semibold">@c.FullName</div>
+                                <div class="text-sage small">@c.Phone — @c.Email</div>
+                            </div>
+                            <button class="btn btn-sm btn-primary" @onclick="() => SelectClient(c)">View Profile</button>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    }
+}
+else
+{
+    <button class="btn btn-outline-secondary mb-3" @onclick="ClearSelection">← Back to results</button>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h4>@selectedClient.FullName</h4>
+            <p class="mb-1"><strong>Phone:</strong> @selectedClient.Phone</p>
+            <p class="mb-1"><strong>Email:</strong> @selectedClient.Email</p>
+            <p class="mb-1">
+                <strong>Membership:</strong>
+                @if (membership is not null && membership.IsActive)
+                {
+                    <span class="badge bg-success">@membership.PlanName (active)</span>
+                }
+                else
+                {
+                    <span class="badge bg-secondary">No active membership</span>
+                }
+            </p>
+        </div>
+    </div>
+
+    <h5>Appointment History</h5>
+    @if (history is null)
+    {
+        <p>Loading...</p>
+    }
+    else if (!history.Any())
+    {
+        <p class="text-sage">No past appointments on file.</p>
+    }
+    else
+    {
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Service</th>
+                    <th>Provider</th>
+                    <th>Status</th>
+                    <th>Provider Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in history)
+                {
+                    <tr>
+                        <td>@row.Appointment.StartTime.ToString("MMM d, yyyy h:mm tt")</td>
+                        <td>@row.Service?.Name</td>
+                        <td>@row.Provider?.FullName</td>
+                        <td><span class="status-badge status-@row.Appointment.Status.ToLower()">@row.Appointment.Status</span></td>
+                        <td>@(string.IsNullOrWhiteSpace(row.Appointment.ProviderNotes) ? "—" : row.Appointment.ProviderNotes)</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private string searchTerm = "";
+    private List<User>? searchResults;
+    private User? selectedClient;
+    private Membership? membership;
+    private List<HistoryRow>? history;
+
+    private async Task Search()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            searchResults = null;
+            return;
+        }
+
+        var term = searchTerm.Trim();
+        searchResults = await Db.Users
+            .Where(u => u.Role == "Client" &&
+                (u.FirstName.Contains(term) || u.LastName.Contains(term) ||
+                 u.Phone.Contains(term) || u.Email.Contains(term)))
+            .OrderBy(u => u.LastName)
+            .Take(25)
+            .ToListAsync();
+    }
+
+    private async Task SelectClient(User client)
+    {
+        selectedClient = client;
+        membership = await Db.Memberships
+            .Where(m => m.UserId == client.Id)
+            .OrderByDescending(m => m.StartDate)
+            .FirstOrDefaultAsync();
+
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+        var providers = await Db.Users.Where(u => u.Role == "Provider").ToDictionaryAsync(u => u.Id);
+
+        var appts = await Db.Appointments
+            .Where(a => a.ClientId == client.Id)
+            .OrderByDescending(a => a.StartTime)
+            .ToListAsync();
+
+        history = appts.Select(a => new HistoryRow(
+            a,
+            services.GetValueOrDefault(a.ServiceId),
+            a.ProviderId.HasValue ? providers.GetValueOrDefault(a.ProviderId.Value) : null)).ToList();
+    }
+
+    private void ClearSelection()
+    {
+        selectedClient = null;
+        membership = null;
+        history = null;
+    }
+
+    private record HistoryRow(Appointment Appointment, Service? Service, User? Provider);
+}

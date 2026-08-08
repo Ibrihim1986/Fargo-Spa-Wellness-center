@@ -1,0 +1,248 @@
+@page "/admin/staff-reports"
+@layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
+@attribute [Authorize(Roles = "Admin,Manager")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Staff Reports - Admin</PageTitle>
+
+<h3>Staff Utilization & Performance</h3>
+
+<div class="d-flex gap-2 align-items-center mb-3">
+    <label class="m-0">From</label>
+    <InputDate @bind-Value="startDate" class="form-control form-control-sm w-auto" />
+    <label class="m-0">To</label>
+    <InputDate @bind-Value="endDate" class="form-control form-control-sm w-auto" />
+    <button class="btn btn-sm btn-primary" @onclick="ApplyRangeAsync">Apply</button>
+        <div class="ms-auto">
+        <label class="me-2">Sort by</label>
+        <select class="form-select form-select-sm w-auto" @onchange="OnSortChanged">
+            <option value="util_desc">Utilization ↓</option>
+            <option value="util_asc">Utilization ↑</option>
+            <option value="rev_desc">Revenue ↓</option>
+            <option value="rev_asc">Revenue ↑</option>
+        </select>
+        <div class="btn-group ms-3">
+            <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportCsv">Export CSV</a>
+            <a class="btn btn-sm btn-outline-secondary" href="#" @onclick="ExportPdf">Export PDF</a>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Providers</h5>
+                @if (providerStats is null || !providerStats.Any())
+                {
+                    <div class="text-muted">No provider data for the selected range.</div>
+                }
+
+                else
+                {
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Provider</th>
+                                <th class="text-end">Util %</th>
+                                <th class="text-end">Booked Hrs</th>
+                                <th class="text-end">Avail Hrs</th>
+                                <th class="text-end">Revenue</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var p in providerStats)
+                            {
+                                <tr class="@(selectedProviderId == p.ProviderId ? "table-active" : "")">
+                                    <td>@p.ProviderName</td>
+                                    <td class="text-end">@((p.AvailableHours == 0) ? 0 : Math.Round(p.BookedHours / p.AvailableHours * 100, 1))%</td>
+                                    <td class="text-end">@p.BookedHours</td>
+                                    <td class="text-end">@p.AvailableHours</td>
+                                    <td class="text-end">@p.Revenue.ToString("C")</td>
+                                    <td class="text-end"><button class="btn btn-sm btn-outline-primary" @onclick="() => SelectProvider(p.ProviderId)">Details</button></td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-3">
+            <div class="card-body">
+                <h5>Provider Details</h5>
+                @if (selectedProvider is null)
+                {
+                    <div class="text-muted">Select a provider to view details.</div>
+                }
+                else
+                {
+                    <div><strong>@selectedProvider.FullName</strong></div>
+                    <div>Booked hours: <strong>@selectedStat.BookedHours</strong></div>
+                    <div>Available hours: <strong>@selectedStat.AvailableHours</strong></div>
+                    <div>Utilization: <strong>@((selectedStat.AvailableHours == 0) ? 0 : Math.Round(selectedStat.BookedHours / selectedStat.AvailableHours * 100,1))%</strong></div>
+                    <div>Revenue: <strong>@selectedStat.Revenue.ToString("C")</strong></div>
+                    <hr />
+                    <h6>Appointments</h6>
+                    @if (selectedAppointments is null || !selectedAppointments.Any())
+                    {
+                        <div class="text-muted">No appointments in range.</div>
+                    }
+                    else
+                    {
+                        <ul class="list-unstyled small">
+                            @foreach (var a in selectedAppointments)
+                            {
+                                <li>@a.StartTime.ToLocalTime(): @a.ServiceId — @a.ClientId — @a.Price.ToString("C")</li>
+                            }
+                        </ul>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DateTime startDate = DateTime.UtcNow.Date.AddDays(-29);
+    private DateTime endDate = DateTime.UtcNow.Date;
+
+    private List<ProviderStat>? providerStats;
+    private int? selectedProviderId;
+    private User? selectedProvider;
+    private ProviderStat selectedStat = new ProviderStat();
+    private List<Appointment>? selectedAppointments;
+
+    private string sortKey = "util_desc";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task ApplyRangeAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var start = startDate.Date;
+        var end = endDate.Date.AddDays(1);
+
+        // Get providers
+        var providers = await Db.Users.Where(u => u.Role == "Provider").ToListAsync();
+
+        var appts = await Db.Appointments
+            .Where(a => a.ProviderId != null && a.StartTime >= start && a.StartTime < end && a.Status != "Cancelled")
+            .ToListAsync();
+
+        // availability entries (hour slots)
+        var availEntries = await Db.ProviderAvailabilities
+            .Where(pa => pa.Date >= start && pa.Date < end)
+            .ToListAsync();
+
+        var stats = new List<ProviderStat>();
+
+        foreach (var prov in providers)
+        {
+            var provAppts = appts.Where(a => a.ProviderId == prov.Id).ToList();
+            var bookedHours = provAppts.Sum(a => (decimal)(a.EndTime - a.StartTime).TotalHours);
+
+            // compute available hours: if availability entries exist for provider, count IsAvailable==true rows
+            var provAvail = availEntries.Where(pa => pa.ProviderId == prov.Id).ToList();
+            decimal availableHours;
+            if (provAvail.Any())
+            {
+                availableHours = provAvail.Count(pa => pa.IsAvailable);
+            }
+            else
+            {
+                // fallback: assume 8 hours per day
+                var days = (endDate.Date - startDate.Date).Days + 1;
+                availableHours = days * 8;
+            }
+
+            var revenue = provAppts.Sum(a => a.Price);
+
+            stats.Add(new ProviderStat
+            {
+                ProviderId = prov.Id,
+                ProviderName = prov.FullName,
+                BookedHours = bookedHours,
+                AvailableHours = availableHours,
+                Revenue = revenue
+            });
+        }
+
+        providerStats = stats;
+        ApplySort();
+        // clear selection
+        selectedProviderId = null;
+        selectedProvider = null;
+        selectedAppointments = null;
+    }
+
+    private void ApplySort()
+    {
+        if (providerStats == null) return;
+        providerStats = sortKey switch
+        {
+            "util_asc" => providerStats.OrderBy(p => (p.AvailableHours == 0 ? 0 : p.BookedHours / p.AvailableHours)).ToList(),
+            "util_desc" => providerStats.OrderByDescending(p => (p.AvailableHours == 0 ? 0 : p.BookedHours / p.AvailableHours)).ToList(),
+            "rev_asc" => providerStats.OrderBy(p => p.Revenue).ToList(),
+            "rev_desc" => providerStats.OrderByDescending(p => p.Revenue).ToList(),
+            _ => providerStats
+        };
+    }
+
+    private async Task OnSortChanged(ChangeEventArgs e)
+    {
+        sortKey = e.Value?.ToString() ?? "util_desc";
+        ApplySort();
+    }
+
+    private async Task SelectProvider(int providerId)
+    {
+        selectedProviderId = providerId;
+        selectedProvider = await Db.Users.FindAsync(providerId);
+        // load appointments
+        selectedAppointments = await Db.Appointments
+            .Where(a => a.ProviderId == providerId && a.StartTime >= startDate.Date && a.StartTime < endDate.Date.AddDays(1) && a.Status != "Cancelled")
+            .OrderBy(a => a.StartTime)
+            .ToListAsync();
+
+        var stat = providerStats?.FirstOrDefault(p => p.ProviderId == providerId);
+        if (stat != null) selectedStat = stat;
+    }
+
+    private void ExportCsv()
+    {
+        var url = $"/admin/export?report=staff&format=csv&start={startDate:O}&end={endDate:O}";
+        NavigationManager.NavigateTo(url, true);
+    }
+
+    private async Task ExportPdf()
+    {
+        var url = $"/admin/export?report=staff&format=print&start={startDate:O}&end={endDate:O}";
+        await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private class ProviderStat
+    {
+        public int ProviderId { get; set; }
+        public string ProviderName { get; set; } = string.Empty;
+        public decimal BookedHours { get; set; }
+        public decimal AvailableHours { get; set; }
+        public decimal Revenue { get; set; }
+    }
+}

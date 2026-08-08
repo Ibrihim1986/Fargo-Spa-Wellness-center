@@ -10,6 +10,11 @@ public class Service
     public decimal Price { get; set; }
     public bool IsActive { get; set; }
 
+    // US-713: minimum client age for this service; null = no restriction
+    public int? MinimumAge { get; set; }
+
+    // US-708/US-713: whether booking this service requires a signed waiver/consent
+    public bool RequiresWaiver { get; set; }
     // US-405: waiver type a client must have signed before this service can be performed (null = none required)
     public string? RequiresWaiverType { get; set; }
 

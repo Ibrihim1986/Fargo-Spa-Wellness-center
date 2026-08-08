@@ -6,7 +6,10 @@
 @using Family_and_Spa_Wellness.Models
 @using Microsoft.EntityFrameworkCore
 @using Microsoft.AspNetCore.Components.Forms
+@using System.Text.Json
+@using System.Security.Claims
 @inject AppDbContext Db
+@inject Microsoft.AspNetCore.Components.Authorization.AuthenticationStateProvider AuthStateProvider
 
 <PageTitle>Manage Pricing - Admin</PageTitle>
 
@@ -43,7 +46,7 @@
                         </InputSelect>
                     </div>
                     <div class="col-md-2 d-flex gap-2">
-                        <button class="btn btn-success" type="submit">Save</button>
+                        <button class="btn btn-success" type="submit">Submit for Approval</button>
                         <button class="btn btn-secondary" type="button" @onclick="() => editTier = null">Cancel</button>
                     </div>
                 </div>
@@ -118,6 +121,27 @@
     private async Task SaveTier()
     {
         if (editTier is null) return;
+
+        var auth = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = auth.User;
+        var requesterId = int.Parse(user.FindFirst(ClaimTypes.NameIdentifier)!.Value);
+        var requesterEmail = user.FindFirst(ClaimTypes.Email)?.Value ?? "";
+
+        var payload = JsonSerializer.Serialize(editTier);
+        var req = new ApprovalRequest
+        {
+            EntityType = "ServicePricingTier",
+            Action = editTier.Id == 0 ? "Create" : "Update",
+            EntityId = editTier.Id == 0 ? null : editTier.Id,
+            Payload = payload,
+            RequestedById = requesterId,
+            RequestedByEmail = requesterEmail,
+            RequestedAt = DateTime.UtcNow,
+            Status = "Pending"
+        };
+
+        Db.ApprovalRequests.Add(req);
+        await Db.SaveChangesAsync();
 
         if (editTier.Id == 0)
         {

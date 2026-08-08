@@ -1,9 +1,274 @@
 @page "/admin/checkout"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
 @attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject IPaymentProvider PaymentProvider
+@inject NavigationManager NavigationManager
 
+<!-- US-304: Process payments and tips at checkout (Admin/front-desk) -->
 <PageTitle>Checkout - Admin</PageTitle>
 
 <h1>Checkout</h1>
-<p>Coming soon: process payments and tips at checkout.</p>
-@((MarkupString)"<!-- US-304: Process payments and tips at checkout (Admin/front-desk) -->")
+
+@if (appointment is null)
+{
+    <div class="alert alert-warning">
+        No appointment selected. Open Checkout from an appointment's "Check Out" button on the Front Desk page.
+    </div>
+}
+else
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">@service?.Name — @client?.FullName</h5>
+            <p class="text-sage mb-1">Provider: @provider?.FullName</p>
+            <p class="text-sage">@appointment.StartTime.ToString("MMM d, h:mm tt")</p>
+
+            <table class="table">
+                <tbody>
+                    <tr>
+                        <td>Service cost</td>
+                        <td class="text-end">@appointment.Price.ToString("C")</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Tip
+                            <div class="btn-group btn-group-sm ms-2" role="group">
+                                <button class="btn btn-outline-secondary" @onclick="() => SetTipPercent(0.15m)">15%</button>
+                                <button class="btn btn-outline-secondary" @onclick="() => SetTipPercent(0.20m)">20%</button>
+                                <button class="btn btn-outline-secondary" @onclick="() => SetTipPercent(0.25m)">25%</button>
+                            </div>
+                        </td>
+                        <td class="text-end" style="width:140px;">
+                            <input type="number" min="0" step="0.01" class="form-control text-end" @bind="tipAmount" />
+                        </td>
+                    </tr>
+                    <tr class="fw-bold">
+                        <td>Total due</td>
+                        <td class="text-end">@TotalDue.ToString("C")</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="mb-3">
+                <label class="form-label">Payment method</label>
+                <select class="form-select" @bind="paymentMethod">
+                    <option value="Card">Card</option>
+                    <option value="Cash">Cash</option>
+                    <option value="GiftCard">Gift Card</option>
+                </select>
+            </div>
+
+            @if (paymentMethod == "GiftCard")
+            {
+                <div class="row g-2 mb-3 align-items-end">
+                    <div class="col-md-5">
+                        <label class="form-label">Gift card code</label>
+                        <input class="form-control" @bind="giftCardCode" />
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-outline-primary" @onclick="LookupGiftCard">Check Balance</button>
+                    </div>
+                    <div class="col-md-4">
+                        @if (giftCardBalance is not null)
+                        {
+                            <span class="badge bg-info text-dark">Balance: @giftCardBalance.Value.ToString("C")</span>
+                        }
+                    </div>
+                </div>
+
+                @if (giftCardBalance is not null && giftCardBalance.Value < TotalDue)
+                {
+                    <div class="alert alert-info">
+                        Gift card covers @giftCardBalance.Value.ToString("C") of @TotalDue.ToString("C").
+                        The remaining <strong>@((TotalDue - giftCardBalance.Value).ToString("C"))</strong> will be charged to a secondary method.
+                        <select class="form-select mt-2" @bind="secondaryPaymentMethod">
+                            <option value="Card">Card</option>
+                            <option value="Cash">Cash</option>
+                        </select>
+                    </div>
+                }
+                @if (giftCardBalance is not null && giftCardBalance.Value <= 0)
+                {
+                    <div class="alert alert-danger">This gift card has a zero balance and cannot be used.</div>
+                }
+            }
+
+            @if (checkoutError is not null)
+            {
+                <div class="alert alert-danger">@checkoutError</div>
+            }
+
+            @if (receipt is null)
+            {
+                <button class="btn btn-primary" @onclick="ProcessPayment" disabled="@isProcessing">
+                    @(isProcessing ? "Processing..." : "Process Payment")
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (receipt is not null)
+    {
+        <div class="card border-success">
+            <div class="card-body">
+                <h5 class="card-title text-success">Payment Complete</h5>
+                <p><strong>Receipt #:</strong> @receipt.ReceiptNumber</p>
+                <p><strong>Service:</strong> @appointment.Price.ToString("C")</p>
+                <p><strong>Tip:</strong> @receipt.TipAmount.ToString("C") (to @provider?.FullName)</p>
+                @if (receipt.GiftCardAmountApplied > 0)
+                {
+                    <p><strong>Gift card applied:</strong> @receipt.GiftCardAmountApplied.ToString("C")</p>
+                }
+                <p><strong>Method:</strong> @receipt.PaymentMethod</p>
+                <p class="fw-bold">Total: @((receipt.ServiceAmount + receipt.TipAmount).ToString("C"))</p>
+                <a class="btn btn-outline-secondary" href="/admin/front-desk">Back to Front Desk</a>
+            </div>
+        </div>
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    public int? AppointmentId { get; set; }
+
+    private Appointment? appointment;
+    private User? client;
+    private User? provider;
+    private Service? service;
+
+    private decimal tipAmount;
+    private string paymentMethod = "Card";
+    private string secondaryPaymentMethod = "Card";
+
+    private string giftCardCode = "";
+    private decimal? giftCardBalance;
+    private GiftCard? matchedGiftCard;
+
+    private bool isProcessing;
+    private string? checkoutError;
+    private Transaction? receipt;
+
+    private decimal TotalDue => (appointment?.Price ?? 0) + tipAmount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AppointmentId is null) return;
+
+        appointment = await Db.Appointments.FindAsync(AppointmentId.Value);
+        if (appointment is null) return;
+
+        client = await Db.Users.FindAsync(appointment.ClientId);
+        service = await Db.Services.FindAsync(appointment.ServiceId);
+        if (appointment.ProviderId.HasValue)
+        {
+            provider = await Db.Users.FindAsync(appointment.ProviderId.Value);
+        }
+    }
+
+    private void SetTipPercent(decimal percent)
+    {
+        if (appointment is null) return;
+        tipAmount = Math.Round(appointment.Price * percent, 2);
+    }
+
+    private async Task LookupGiftCard()
+    {
+        checkoutError = null;
+        matchedGiftCard = await Db.GiftCards.FirstOrDefaultAsync(g => g.Code == giftCardCode.Trim());
+        if (matchedGiftCard is null)
+        {
+            giftCardBalance = null;
+            checkoutError = "Gift card code not found.";
+            return;
+        }
+        giftCardBalance = matchedGiftCard.CurrentBalance;
+    }
+
+    private async Task ProcessPayment()
+    {
+        if (appointment is null) return;
+
+        checkoutError = null;
+        isProcessing = true;
+
+        try
+        {
+            decimal giftCardApplied = 0;
+            var effectiveMethod = paymentMethod;
+
+            if (paymentMethod == "GiftCard")
+            {
+                if (matchedGiftCard is null)
+                {
+                    checkoutError = "Please look up a valid gift card before processing.";
+                    return;
+                }
+                if (matchedGiftCard.CurrentBalance <= 0)
+                {
+                    checkoutError = "This gift card has a zero balance and cannot be used.";
+                    return;
+                }
+
+                giftCardApplied = Math.Min(matchedGiftCard.CurrentBalance, TotalDue);
+                var remainder = TotalDue - giftCardApplied;
+
+                if (remainder > 0)
+                {
+                    // Charge the remainder to the secondary method.
+                    if (secondaryPaymentMethod == "Card")
+                    {
+                        await PaymentProvider.ChargeAsync(remainder, "USD", "front-desk-card-entry");
+                    }
+                    effectiveMethod = $"GiftCard+{secondaryPaymentMethod}";
+                }
+                else
+                {
+                    effectiveMethod = "GiftCard";
+                }
+
+                matchedGiftCard.CurrentBalance -= giftCardApplied;
+                Db.GiftCards.Update(matchedGiftCard);
+            }
+            else if (paymentMethod == "Card")
+            {
+                // Token is a placeholder until a real payment element is wired up (see US-901).
+                await PaymentProvider.ChargeAsync(TotalDue, "USD", "front-desk-card-entry");
+            }
+            // Cash requires no external charge call.
+
+            var transaction = new Transaction
+            {
+                AppointmentId = appointment.Id,
+                ServiceAmount = appointment.Price,
+                TipAmount = tipAmount,
+                ProviderId = appointment.ProviderId,
+                PaymentMethod = effectiveMethod,
+                Status = "Success",
+                ReceiptNumber = $"RCPT-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(1000, 9999)}",
+                GiftCardId = matchedGiftCard?.Id,
+                GiftCardAmountApplied = giftCardApplied,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            Db.Transactions.Add(transaction);
+            await Db.SaveChangesAsync();
+
+            receipt = transaction;
+        }
+        catch (Exception ex)
+        {
+            // US-304: card declined — show an error and allow retry with a different method.
+            checkoutError = $"Payment could not be processed: {ex.Message}. Please try a different payment method.";
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+}

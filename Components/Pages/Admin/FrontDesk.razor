@@ -4,8 +4,11 @@
 @rendermode InteractiveServer
 @using Family_and_Spa_Wellness.Data
 @using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
+@inject IEmailSender EmailSender
+@inject NavigationManager NavigationManager
 
 <PageTitle>Front Desk - Admin</PageTitle>
 
@@ -14,8 +17,106 @@
         <h1>Front Desk</h1>
         <p class="text-sage">Manage all bookings across providers.</p>
     </div>
-    <button class="btn btn-primary rounded-pill px-4" disabled title="Coming soon">+ New Booking</button>
+    <div class="d-flex gap-2">
+        <a class="btn btn-outline-secondary rounded-pill px-4" href="/admin/schedule">Full Schedule</a>
+        <button class="btn btn-primary rounded-pill px-4" @onclick="ToggleBookingForm">
+            @(showBookingForm ? "Close" : "+ New Booking")
+        </button>
+    </div>
 </div>
+
+@if (showBookingForm)
+{
+    <!-- US-301: Receptionist books, reschedules, or cancels appointments for customers -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title">New Booking</h5>
+
+            @if (bookingError is not null)
+            {
+                <div class="alert alert-danger">@bookingError</div>
+            }
+            @if (bookingSuccess is not null)
+            {
+                <div class="alert alert-success">@bookingSuccess</div>
+            }
+
+            <div class="mb-3">
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="bookingMode" id="modeExisting"
+                           checked="@(bookingMode == "existing")" @onchange='() => bookingMode = "existing"' />
+                    <label class="form-check-label" for="modeExisting">Existing client</label>
+                </div>
+                <div class="form-check form-check-inline">
+                    <input class="form-check-input" type="radio" name="bookingMode" id="modeWalkin"
+                           checked="@(bookingMode == "walkin")" @onchange='() => bookingMode = "walkin"' />
+                    <label class="form-check-label" for="modeWalkin">New walk-in / phone client</label>
+                </div>
+            </div>
+
+            @if (bookingMode == "existing")
+            {
+                <div class="mb-3">
+                    <label class="form-label">Client</label>
+                    <select class="form-select" @bind="selectedClientId">
+                        <option value="">Select a client...</option>
+                        @foreach (var client in Clients)
+                        {
+                            <option value="@client.Id">@client.FullName — @client.Phone</option>
+                        }
+                    </select>
+                </div>
+            }
+            else
+            {
+                <div class="row g-2 mb-3">
+                    <div class="col-md-4">
+                        <input class="form-control" placeholder="First name" @bind="walkinFirstName" />
+                    </div>
+                    <div class="col-md-4">
+                        <input class="form-control" placeholder="Last name" @bind="walkinLastName" />
+                    </div>
+                    <div class="col-md-4">
+                        <input class="form-control" placeholder="Phone" @bind="walkinPhone" />
+                    </div>
+                </div>
+            }
+
+            <div class="row g-2 mb-3">
+                <div class="col-md-4">
+                    <label class="form-label">Service</label>
+                    <select class="form-select" @bind="selectedServiceId">
+                        <option value="">Select a service...</option>
+                        @foreach (var service in ActiveServices)
+                        {
+                            <option value="@service.Id">@service.Name (@service.DurationMinutes min)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Provider</label>
+                    <select class="form-select" @bind="selectedProviderId">
+                        <option value="">Select a provider...</option>
+                        @foreach (var provider in Providers)
+                        {
+                            <option value="@provider.Id">@provider.FullName</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Date</label>
+                    <input type="date" class="form-control" @bind="bookingDate" @bind:format="yyyy-MM-dd" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label">Time</label>
+                    <input type="time" class="form-control" @bind="bookingTime" />
+                </div>
+            </div>
+
+            <button class="btn btn-primary" @onclick="SubmitBooking">Confirm Booking</button>
+        </div>
+    </div>
+}
 
 @if (dayAppointments is null)
 {
@@ -23,6 +124,27 @@
 }
 else
 {
+    @if (potentialNoShows.Any())
+    {
+        <!-- US-303: flag possible no-shows for the receptionist to confirm -->
+        <div class="alert alert-warning">
+            <strong>@potentialNoShows.Count appointment(s) may be a no-show</strong> — the scheduled time has passed with no check-in.
+            <div class="d-flex flex-column gap-2 mt-2">
+                @foreach (var appt in potentialNoShows)
+                {
+                    var client = users.GetValueOrDefault(appt.ClientId);
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>@client?.FullName — @appt.StartTime.ToString("h:mm tt")</span>
+                        <span class="d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-danger" @onclick='() => UpdateStatus(appt, "NoShow")'>Confirm No-show</button>
+                            <button class="btn btn-sm btn-outline-secondary" @onclick='() => UpdateStatus(appt, "CheckedIn")'>They're here — Check In</button>
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
     <div class="row g-3 mb-4">
         <div class="col-6 col-lg-3">
             <div class="card h-100">
@@ -35,7 +157,7 @@ else
         <div class="col-6 col-lg-3">
             <div class="card h-100">
                 <div class="card-body">
-                    <div class="stat-value">@dayAppointments.Count(a => a.Status == "CheckedIn")</div>
+                    <div class="stat-value">@dayAppointments.Count(a => a.Status == "CheckedIn" || a.Status == "InProgress")</div>
                     <div class="stat-label">Checked In</div>
                 </div>
             </div>
@@ -70,6 +192,7 @@ else
                 <option value="">All Statuses</option>
                 <option value="Upcoming">Upcoming</option>
                 <option value="CheckedIn">Checked In</option>
+                <option value="InProgress">In Progress</option>
                 <option value="Completed">Completed</option>
                 <option value="NoShow">No-show</option>
                 <option value="Cancelled">Cancelled</option>
@@ -99,12 +222,48 @@ else
                             </div>
                             <div class="text-sage small">@row.Service?.Name — @row.Provider?.FullName — @row.Client?.Phone</div>
                         </div>
-                        <div class="d-flex gap-2">
-                            <button class="btn btn-sm btn-outline-primary" @onclick='() => UpdateStatus(row.Appointment, "CheckedIn")'>Check In</button>
-                            <button class="btn btn-sm btn-outline-secondary" @onclick='() => UpdateStatus(row.Appointment, "NoShow")'>No-show</button>
+                        <div class="d-flex gap-2 flex-wrap">
+                            @if (row.Appointment.Status == "Upcoming")
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick='() => UpdateStatus(row.Appointment, "CheckedIn")'>Check In</button>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => UpdateStatus(row.Appointment, "NoShow")'>No-show</button>
+                            }
+                            @if (row.Appointment.Status == "CheckedIn")
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick='() => UpdateStatus(row.Appointment, "InProgress")'>Start Service</button>
+                            }
+                            @if (row.Appointment.Status is "CheckedIn" or "InProgress")
+                            {
+                                <button class="btn btn-sm btn-success" @onclick="() => CheckOut(row.Appointment)">Check Out</button>
+                            }
+                            <button class="btn btn-sm btn-outline-warning" @onclick="() => StartReschedule(row.Appointment)">Reschedule</button>
                             <button class="btn btn-sm btn-outline-danger" @onclick='() => UpdateStatus(row.Appointment, "Cancelled")'>Cancel</button>
                         </div>
                     </div>
+
+                    @if (reschedulingId == row.Appointment.Id)
+                    {
+                        <div class="card-body border-top pt-3">
+                            @if (rescheduleError is not null)
+                            {
+                                <div class="alert alert-danger">@rescheduleError</div>
+                            }
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-3">
+                                    <label class="form-label">New date</label>
+                                    <input type="date" class="form-control" @bind="rescheduleDate" @bind:format="yyyy-MM-dd" />
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">New time</label>
+                                    <input type="time" class="form-control" @bind="rescheduleTime" />
+                                </div>
+                                <div class="col-md-3 d-flex gap-2">
+                                    <button class="btn btn-primary" @onclick="() => SaveReschedule(row.Appointment)">Save</button>
+                                    <button class="btn btn-outline-secondary" @onclick="CancelReschedule">Cancel</button>
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             }
         </div>
@@ -119,6 +278,34 @@ else
     private DateTime selectedDate = DateTime.Today;
     private string searchTerm = "";
     private string statusFilter = "";
+
+    // US-301: new booking form state
+    private bool showBookingForm;
+    private string bookingMode = "existing";
+    private int? selectedClientId;
+    private string walkinFirstName = "";
+    private string walkinLastName = "";
+    private string walkinPhone = "";
+    private int? selectedProviderId;
+    private int? selectedServiceId;
+    private DateTime bookingDate = DateTime.Today;
+    private TimeOnly? bookingTime;
+    private string? bookingError;
+    private string? bookingSuccess;
+
+    // US-301: reschedule state
+    private int? reschedulingId;
+    private DateTime rescheduleDate;
+    private TimeOnly rescheduleTime;
+    private string? rescheduleError;
+
+    // US-303: auto no-show grace period before flagging
+    private static readonly TimeSpan NoShowGracePeriod = TimeSpan.FromMinutes(15);
+    private List<Appointment> potentialNoShows = [];
+
+    private IEnumerable<User> Providers => users.Values.Where(u => u.Role == "Provider").OrderBy(u => u.FullName);
+    private IEnumerable<User> Clients => users.Values.Where(u => u.Role == "Client").OrderBy(u => u.FullName);
+    private IEnumerable<Service> ActiveServices => services.Values.Where(s => s.IsActive).OrderBy(s => s.Name);
 
     private IEnumerable<BookingRow> FilteredAppointments =>
         dayAppointments!
@@ -146,13 +333,236 @@ else
         dayAppointments = await Db.Appointments
             .Where(a => a.StartTime.Date == selectedDate.Date)
             .ToListAsync();
+
+        // US-303: flag appointments whose start time has passed the grace
+        // period with no check-in, so the receptionist can confirm/dismiss.
+        var now = DateTime.UtcNow;
+        potentialNoShows = dayAppointments
+            .Where(a => a.Status == "Upcoming" && now - a.StartTime > NoShowGracePeriod)
+            .OrderBy(a => a.StartTime)
+            .ToList();
     }
 
     private async Task UpdateStatus(Appointment appointment, string status)
     {
+        // Cancelling frees the slot automatically: conflict checks below exclude
+        // any appointment whose Status == "Cancelled".
+        // Hook point for a cancellation-fee/policy check (see Fees.razor / US-305).
         appointment.Status = status;
         Db.Appointments.Update(appointment);
         await Db.SaveChangesAsync();
+        await LoadDayAsync();
+    }
+
+    private async Task CheckOut(Appointment appointment)
+    {
+        // US-303: checking out marks the appointment Completed and hands off
+        // to the checkout flow (US-304) to collect payment/tip.
+        appointment.Status = "Completed";
+        Db.Appointments.Update(appointment);
+        await Db.SaveChangesAsync();
+        NavigationManager.NavigateTo($"/admin/checkout?appointmentId={appointment.Id}");
+    }
+
+    private void ToggleBookingForm()
+    {
+        showBookingForm = !showBookingForm;
+        if (showBookingForm)
+        {
+            ResetBookingForm(clearVisibility: false);
+        }
+    }
+
+    private void ResetBookingForm(bool clearVisibility = true)
+    {
+        if (clearVisibility)
+        {
+            showBookingForm = false;
+        }
+        bookingMode = "existing";
+        selectedClientId = null;
+        walkinFirstName = "";
+        walkinLastName = "";
+        walkinPhone = "";
+        selectedProviderId = null;
+        selectedServiceId = null;
+        bookingDate = selectedDate;
+        bookingTime = null;
+        bookingError = null;
+        bookingSuccess = null;
+    }
+
+    private async Task<bool> HasConflictAsync(int providerId, DateTime start, DateTime end, int? excludeAppointmentId)
+    {
+        return await Db.Appointments.AnyAsync(a =>
+            a.ProviderId == providerId &&
+            a.Status != "Cancelled" &&
+            a.Id != (excludeAppointmentId ?? -1) &&
+            a.StartTime < end &&
+            start < a.EndTime);
+    }
+
+    private async Task SubmitBooking()
+    {
+        bookingError = null;
+        bookingSuccess = null;
+
+        if (selectedServiceId is null)
+        {
+            bookingError = "Please select a service.";
+            return;
+        }
+        if (selectedProviderId is null)
+        {
+            bookingError = "Please select a provider.";
+            return;
+        }
+        if (bookingTime is null)
+        {
+            bookingError = "Please select a start time.";
+            return;
+        }
+
+        int clientId;
+        string clientEmailForNotice;
+
+        if (bookingMode == "existing")
+        {
+            if (selectedClientId is null)
+            {
+                bookingError = "Please select a client.";
+                return;
+            }
+            clientId = selectedClientId.Value;
+            clientEmailForNotice = users.GetValueOrDefault(clientId)?.Email ?? "";
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(walkinFirstName) || string.IsNullOrWhiteSpace(walkinLastName) || string.IsNullOrWhiteSpace(walkinPhone))
+            {
+                bookingError = "Please enter the walk-in client's first name, last name, and phone number.";
+                return;
+            }
+
+            var walkin = new User
+            {
+                FirstName = walkinFirstName.Trim(),
+                LastName = walkinLastName.Trim(),
+                Phone = walkinPhone.Trim(),
+                Email = $"walkin-{Guid.NewGuid():N}@placeholder.local",
+                Role = "Client",
+                CreatedAt = DateTime.UtcNow
+            };
+            Db.Users.Add(walkin);
+            await Db.SaveChangesAsync();
+            users[walkin.Id] = walkin;
+            clientId = walkin.Id;
+            clientEmailForNotice = "";
+        }
+
+        var service = services.GetValueOrDefault(selectedServiceId.Value);
+        if (service is null)
+        {
+            bookingError = "Selected service could not be found.";
+            return;
+        }
+
+        var start = bookingDate.Date + bookingTime.Value.ToTimeSpan();
+        var end = start.AddMinutes(service.DurationMinutes);
+
+        if (await HasConflictAsync(selectedProviderId.Value, start, end, null))
+        {
+            bookingError = "That time conflicts with an existing appointment for this provider. Please choose another time.";
+            return;
+        }
+
+        var appointment = new Appointment
+        {
+            ClientId = clientId,
+            ServiceId = service.Id,
+            ProviderId = selectedProviderId,
+            StartTime = start,
+            EndTime = end,
+            CreatedAt = DateTime.UtcNow,
+            Price = service.Price,
+            Status = "Upcoming"
+        };
+
+        Db.Appointments.Add(appointment);
+        await Db.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(clientEmailForNotice))
+        {
+            try
+            {
+                await EmailSender.SendEmailAsync(clientEmailForNotice, "Appointment Confirmed",
+                    $"Your {service.Name} appointment is confirmed for {start:f}.");
+            }
+            catch
+            {
+                // Notification is best-effort; the booking itself should still succeed.
+            }
+        }
+
+        bookingSuccess = "Booking confirmed.";
+        var wasVisible = showBookingForm;
+        ResetBookingForm(clearVisibility: false);
+        showBookingForm = wasVisible;
+        await LoadDayAsync();
+    }
+
+    private void StartReschedule(Appointment appointment)
+    {
+        reschedulingId = appointment.Id;
+        rescheduleDate = appointment.StartTime.Date;
+        rescheduleTime = TimeOnly.FromDateTime(appointment.StartTime);
+        rescheduleError = null;
+    }
+
+    private void CancelReschedule()
+    {
+        reschedulingId = null;
+        rescheduleError = null;
+    }
+
+    private async Task SaveReschedule(Appointment appointment)
+    {
+        rescheduleError = null;
+
+        var service = services.GetValueOrDefault(appointment.ServiceId);
+        var durationMinutes = service?.DurationMinutes ?? (int)(appointment.EndTime - appointment.StartTime).TotalMinutes;
+
+        var newStart = rescheduleDate.Date + rescheduleTime.ToTimeSpan();
+        var newEnd = newStart.AddMinutes(durationMinutes);
+
+        if (appointment.ProviderId.HasValue &&
+            await HasConflictAsync(appointment.ProviderId.Value, newStart, newEnd, appointment.Id))
+        {
+            rescheduleError = "That time conflicts with an existing appointment for this provider.";
+            return;
+        }
+
+        appointment.StartTime = newStart;
+        appointment.EndTime = newEnd;
+        Db.Appointments.Update(appointment);
+        await Db.SaveChangesAsync();
+
+        var client = users.GetValueOrDefault(appointment.ClientId);
+        if (client is not null && !string.IsNullOrWhiteSpace(client.Email) && !client.Email.Contains("placeholder.local"))
+        {
+            try
+            {
+                await EmailSender.SendEmailAsync(client.Email, "Appointment Rescheduled",
+                    $"Your appointment has been moved to {newStart:f}.");
+            }
+            catch
+            {
+                // Notification is best-effort; the reschedule itself should still succeed.
+            }
+        }
+
+        reschedulingId = null;
+        await LoadDayAsync();
     }
 
     private record BookingRow(Appointment Appointment, User? Client, User? Provider, Service? Service);

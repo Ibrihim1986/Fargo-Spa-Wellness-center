@@ -15,4 +15,7 @@ public class User
     public string? Preferences { get; set; } // US-706: client preferences (e.g. preferred pressure, scent, room temperature)
     public DateTime? DateOfBirth { get; set; } // US-603: used to determine eligibility for kids' pricing tiers
     public string FullName => $"{FirstName} {LastName}";
+
+    // US-705/US-714: how this user wants booking notices delivered
+    public string NotificationChannel { get; set; } = "Email"; // Email, SMS, Both
 }

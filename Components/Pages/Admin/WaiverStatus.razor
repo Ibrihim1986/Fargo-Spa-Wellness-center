@@ -1,10 +1,153 @@
 @page "/admin/waivers"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
 @attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
 
+<!-- US-307: Confirm signed waivers -->
+<!-- US-405: Alert staff on missing/unsigned waivers -->
 <PageTitle>Waiver Status - Admin</PageTitle>
 
 <h1>Waiver Status</h1>
-<p>Coming soon: confirm signed waivers and alert staff to missing ones.</p>
-@((MarkupString)"<!-- US-307: Confirm signed waivers -->")
-@((MarkupString)"<!-- US-405: Alert staff on missing/unsigned waivers -->")
+<p class="text-sage">Check-in compliance for today's appointments.</p>
+
+<div class="mb-3">
+    <input type="date" class="form-control" style="max-width:220px;" @bind="selectedDate" @bind:format="yyyy-MM-dd" @bind:after="LoadAsync" />
+</div>
+
+@if (rows is null)
+{
+    <p>Loading...</p>
+}
+else if (!rows.Any())
+{
+    <p class="text-sage">No appointments today.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Time</th>
+                <th>Client</th>
+                <th>Service</th>
+                <th>Waiver Status</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in rows)
+            {
+                <tr>
+                    <td>@row.Appointment.StartTime.ToString("h:mm tt")</td>
+                    <td>@row.Client?.FullName</td>
+                    <td>@row.Service?.Name</td>
+                    <td>
+                        @if (row.Waiver is null || !row.Waiver.IsSigned)
+                        {
+                            <span class="status-badge status-pending">Not Signed</span>
+                        }
+                        else if (row.Waiver.IsExpired)
+                        {
+                            <span class="status-badge status-cancelled">Expired — new signature required</span>
+                        }
+                        else
+                        {
+                            <span class="status-badge status-completed">Signed (expires @row.Waiver.ExpiresAt?.ToString("MMM d, yyyy"))</span>
+                        }
+                    </td>
+                    <td>
+                        @if (row.Waiver is null || !row.Waiver.IsSigned || row.Waiver.IsExpired)
+                        {
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => StartSign(row)">Confirm Digital Signature</button>
+                        }
+                    </td>
+                </tr>
+
+                @if (signingClientId == row.Client?.Id)
+                {
+                    <tr>
+                        <td colspan="5">
+                            <div class="card">
+                                <div class="card-body d-flex align-items-end gap-3">
+                                    <div>
+                                        <label class="form-label">Valid until</label>
+                                        <input type="date" class="form-control" @bind="signExpiration" @bind:format="yyyy-MM-dd" />
+                                    </div>
+                                    <button class="btn btn-primary" @onclick="() => ConfirmSign(row)">Save Signature</button>
+                                    <button class="btn btn-outline-secondary" @onclick="CancelSign">Cancel</button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                }
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private DateTime selectedDate = DateTime.Today;
+    private List<WaiverRow>? rows;
+
+    private int? signingClientId;
+    private DateTime signExpiration = DateTime.Today.AddYears(1);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var users = await Db.Users.ToDictionaryAsync(u => u.Id);
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+        var waivers = await Db.Waivers.ToDictionaryAsync(w => w.ClientId);
+
+        var appointments = await Db.Appointments
+            .Where(a => a.StartTime.Date == selectedDate.Date && a.Status != "Cancelled")
+            .OrderBy(a => a.StartTime)
+            .ToListAsync();
+
+        rows = appointments.Select(a => new WaiverRow(
+            a,
+            users.GetValueOrDefault(a.ClientId),
+            services.GetValueOrDefault(a.ServiceId),
+            waivers.GetValueOrDefault(a.ClientId))).ToList();
+    }
+
+    private void StartSign(WaiverRow row)
+    {
+        signingClientId = row.Client?.Id;
+        signExpiration = DateTime.Today.AddYears(1);
+    }
+
+    private void CancelSign()
+    {
+        signingClientId = null;
+    }
+
+    private async Task ConfirmSign(WaiverRow row)
+    {
+        if (row.Client is null) return;
+
+        var waiver = await Db.Waivers.FirstOrDefaultAsync(w => w.ClientId == row.Client.Id);
+        if (waiver is null)
+        {
+            waiver = new Waiver { ClientId = row.Client.Id };
+            Db.Waivers.Add(waiver);
+        }
+
+        waiver.SignedAt = DateTime.UtcNow;
+        waiver.ExpiresAt = signExpiration;
+        await Db.SaveChangesAsync();
+
+        signingClientId = null;
+        await LoadAsync();
+    }
+
+    private record WaiverRow(Appointment Appointment, User? Client, Service? Service, Waiver? Waiver);
+}

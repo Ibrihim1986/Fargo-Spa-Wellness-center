@@ -1,9 +1,264 @@
 @page "/admin/gift-cards"
 @layout Family_and_Spa_Wellness.Components.Layout.AdminLayout
 @attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Family_and_Spa_Wellness.Services
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject IPaymentProvider PaymentProvider
+@inject IEmailSender EmailSender
 
+<!-- US-308: Sell/manage gift cards at the front desk -->
 <PageTitle>Gift Cards - Admin</PageTitle>
 
 <h1>Gift Cards</h1>
-<p>Coming soon: sell and manage gift cards at the front desk.</p>
-@((MarkupString)"<!-- US-308: Sell/manage gift cards at the front desk -->")
+
+<div class="row g-4">
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Sell a Gift Card</h5>
+
+                @if (sellError is not null)
+                {
+                    <div class="alert alert-danger">@sellError</div>
+                }
+                @if (soldCard is not null)
+                {
+                    <div class="alert alert-success">
+                        Gift card issued! Code: <strong>@soldCard.Code</strong> — Balance: @soldCard.CurrentBalance.ToString("C")
+                    </div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Amount</label>
+                    <input type="number" min="1" step="0.01" class="form-control" @bind="sellAmount" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Recipient email (optional — for e-delivery)</label>
+                    <input class="form-control" @bind="recipientEmail" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Purchaser email (optional, for receipt)</label>
+                    <input class="form-control" @bind="purchaserEmail" />
+                </div>
+                <button class="btn btn-primary" @onclick="SellGiftCard" disabled="@isSelling">
+                    @(isSelling ? "Processing..." : "Process Payment & Issue Card")
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-6">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">Redeem / Check Balance</h5>
+
+                @if (redeemError is not null)
+                {
+                    <div class="alert alert-danger">@redeemError</div>
+                }
+                @if (redeemMessage is not null)
+                {
+                    <div class="alert alert-success">@redeemMessage</div>
+                }
+
+                <div class="mb-3">
+                    <label class="form-label">Gift card code</label>
+                    <input class="form-control" @bind="redeemCode" />
+                </div>
+                <button class="btn btn-outline-primary mb-3" @onclick="LookupCard">Check Balance</button>
+
+                @if (lookedUpCard is not null)
+                {
+                    <p><strong>Current balance:</strong> @lookedUpCard.CurrentBalance.ToString("C")</p>
+
+                    @if (lookedUpCard.CurrentBalance <= 0)
+                    {
+                        <div class="alert alert-danger">This gift card has a zero balance and cannot be redeemed.</div>
+                    }
+                    else
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Amount to redeem toward this sale</label>
+                            <input type="number" min="0.01" step="0.01" max="@lookedUpCard.CurrentBalance" class="form-control" @bind="redeemAmount" />
+                        </div>
+                        <button class="btn btn-primary" @onclick="RedeemAmount">Deduct from Card</button>
+                    }
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<h5 class="mt-5">Recently Issued Cards</h5>
+@if (recentCards is null)
+{
+    <p>Loading...</p>
+}
+else if (!recentCards.Any())
+{
+    <p class="text-sage">No gift cards issued yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Code</th>
+                <th>Issued</th>
+                <th>Initial Balance</th>
+                <th>Current Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var card in recentCards)
+            {
+                <tr>
+                    <td>@card.Code</td>
+                    <td>@card.IssuedAt.ToString("MMM d, yyyy")</td>
+                    <td>@card.InitialBalance.ToString("C")</td>
+                    <td>@card.CurrentBalance.ToString("C")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private decimal sellAmount = 50;
+    private string recipientEmail = "";
+    private string purchaserEmail = "";
+    private bool isSelling;
+    private string? sellError;
+    private GiftCard? soldCard;
+
+    private string redeemCode = "";
+    private GiftCard? lookedUpCard;
+    private decimal redeemAmount;
+    private string? redeemError;
+    private string? redeemMessage;
+
+    private List<GiftCard>? recentCards;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadRecentAsync();
+    }
+
+    private async Task LoadRecentAsync()
+    {
+        recentCards = await Db.GiftCards.OrderByDescending(g => g.IssuedAt).Take(20).ToListAsync();
+    }
+
+    private async Task SellGiftCard()
+    {
+        sellError = null;
+        soldCard = null;
+
+        if (sellAmount <= 0)
+        {
+            sellError = "Please enter an amount greater than zero.";
+            return;
+        }
+
+        isSelling = true;
+        try
+        {
+            // Placeholder charge until a real payment element is wired up (see US-901).
+            await PaymentProvider.ChargeAsync(sellAmount, "USD", "front-desk-card-entry");
+
+            var card = new GiftCard
+            {
+                Code = GenerateCode(),
+                InitialBalance = sellAmount,
+                CurrentBalance = sellAmount,
+                PurchaserEmail = string.IsNullOrWhiteSpace(purchaserEmail) ? null : purchaserEmail.Trim(),
+                RecipientEmail = string.IsNullOrWhiteSpace(recipientEmail) ? null : recipientEmail.Trim(),
+                IssuedAt = DateTime.UtcNow
+            };
+            Db.GiftCards.Add(card);
+            await Db.SaveChangesAsync();
+
+            var deliverTo = card.RecipientEmail ?? card.PurchaserEmail;
+            if (!string.IsNullOrWhiteSpace(deliverTo))
+            {
+                try
+                {
+                    await EmailSender.SendEmailAsync(deliverTo, "Your Fargo Spa and Wellness Gift Card",
+                        $"Gift card code: {card.Code}\nBalance: {card.CurrentBalance:C}");
+                }
+                catch
+                {
+                    // Email is best-effort; the card is still valid even if delivery fails.
+                }
+            }
+
+            soldCard = card;
+            sellAmount = 50;
+            recipientEmail = "";
+            purchaserEmail = "";
+            await LoadRecentAsync();
+        }
+        catch (Exception ex)
+        {
+            sellError = $"Payment could not be processed: {ex.Message}";
+        }
+        finally
+        {
+            isSelling = false;
+        }
+    }
+
+    private async Task LookupCard()
+    {
+        redeemError = null;
+        redeemMessage = null;
+        lookedUpCard = await Db.GiftCards.FirstOrDefaultAsync(g => g.Code == redeemCode.Trim());
+        if (lookedUpCard is null)
+        {
+            redeemError = "Gift card code not found.";
+        }
+        else
+        {
+            redeemAmount = lookedUpCard.CurrentBalance;
+        }
+    }
+
+    private async Task RedeemAmount()
+    {
+        redeemError = null;
+        redeemMessage = null;
+
+        if (lookedUpCard is null) return;
+
+        if (lookedUpCard.CurrentBalance <= 0)
+        {
+            redeemError = "This gift card has a zero balance and cannot be redeemed.";
+            return;
+        }
+
+        if (redeemAmount <= 0 || redeemAmount > lookedUpCard.CurrentBalance)
+        {
+            redeemError = "Enter an amount between $0.01 and the current balance.";
+            return;
+        }
+
+        lookedUpCard.CurrentBalance -= redeemAmount;
+        Db.GiftCards.Update(lookedUpCard);
+        await Db.SaveChangesAsync();
+
+        redeemMessage = $"Deducted {redeemAmount:C}. Remaining balance: {lookedUpCard.CurrentBalance:C}.";
+        await LoadRecentAsync();
+    }
+
+    private static string GenerateCode()
+    {
+        const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
+        var rnd = Random.Shared;
+        return string.Concat(Enumerable.Range(0, 12).Select(i =>
+            (i > 0 && i % 4 == 0 ? "-" : "") + chars[rnd.Next(chars.Length)]));
+    }
+}

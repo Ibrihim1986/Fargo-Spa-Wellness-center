@@ -32,6 +32,9 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<IAuthorizationHandler, AdminBypassRolesHandler>();
 builder.Services.AddCascadingAuthenticationState();
+// Register ExportService
+builder.Services.AddScoped<ExportService>();
+builder.Services.AddScoped<IPaymentProvider, MockPaymentProvider>();
 // Staff management service
 builder.Services.AddScoped<StaffService>();
 // Pricing service for tiered and provider-specific pricing
@@ -65,5 +68,56 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     await SeedData.SeedAsync(db, app.Configuration);
 }
+
+// Export endpoint: CSV download or printable HTML (for PDF via browser Print-to-PDF)
+app.MapGet("/admin/export", async (HttpContext http, ExportService exporter) =>
+{
+    var q = http.Request.Query;
+    var report = q["report"].ToString().ToLowerInvariant();
+    var format = q["format"].ToString().ToLowerInvariant();
+    if (string.IsNullOrEmpty(format)) format = "csv";
+
+    DateTime start = DateTime.TryParse(q["start"], out var s) ? s : DateTime.UtcNow.Date.AddDays(-30);
+    DateTime end = DateTime.TryParse(q["end"], out var e) ? e : DateTime.UtcNow.Date;
+
+        if (format == "csv")
+    {
+        byte[] bytes;
+        string filename;
+        if (report == "revenue")
+        {
+            var res = await exporter.GenerateRevenueCsvAsync(start, end, "range");
+            bytes = res.bytes; filename = res.filename;
+        }
+        else if (report == "staff")
+        {
+            var res = await exporter.GenerateStaffCsvAsync(start, end);
+            bytes = res.bytes; filename = res.filename;
+        }
+        else if (report == "memberships")
+        {
+            var res = await exporter.GenerateMembershipCsvAsync(start, end);
+            bytes = res.bytes; filename = res.filename;
+        }
+        else if (report == "operational")
+        {
+            var res = await exporter.GenerateOperationalCsvAsync(start, end);
+            bytes = res.bytes; filename = res.filename;
+        }
+        else
+        {
+            // default to revenue
+            var res = await exporter.GenerateRevenueCsvAsync(start, end, "range");
+            bytes = res.bytes; filename = res.filename;
+        }
+
+        return Results.File(bytes, "text/csv", filename);
+    }
+    else
+    {
+        var html = await exporter.RenderReportHtmlAsync(report, start, end);
+        return Results.Content(html, "text/html");
+    }
+});
 
 app.Run();
