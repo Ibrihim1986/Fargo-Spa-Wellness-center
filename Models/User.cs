@@ -12,5 +12,6 @@ public class User
     public DateTime CreatedAt { get; set; }
     public string? Title { get; set; } // Provider job title, e.g. "Massage Therapist"
     public string? Bio { get; set; } // Provider bio/specialties
+    public DateTime? DateOfBirth { get; set; } // US-603: used to determine eligibility for kids' pricing tiers
     public string FullName => $"{FirstName} {LastName}";
 }

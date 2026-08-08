@@ -1,8 +1,10 @@
 @page "/services"
+@rendermode InteractiveServer
 @using Family_and_Spa_Wellness.Data
 @using Microsoft.EntityFrameworkCore
 @inject AppDbContext Db
 
+<!-- US-701: browse services by category and price -->
 <PageTitle>Services - Fargo Spa and Wellness</PageTitle>
 
 <h1>Our Services</h1>
@@ -13,8 +15,23 @@
 }
 else
 {
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <select class="form-select w-auto" @bind="selectedCategory">
+            <option value="">All Categories</option>
+            @foreach (var category in categories)
+            {
+                <option value="@category">@category</option>
+            }
+        </select>
+        <select class="form-select w-auto" @bind="sortOrder">
+            <option value="name">Sort: Name</option>
+            <option value="price-asc">Sort: Price (Low to High)</option>
+            <option value="price-desc">Sort: Price (High to Low)</option>
+        </select>
+    </div>
+
     <div class="row g-3">
-        @foreach (var service in services)
+        @foreach (var service in FilteredServices())
         {
             <div class="col-12 col-md-6 col-lg-4">
                 <div class="card h-100">
@@ -51,11 +68,32 @@ else
 @code {
     private List<Family_and_Spa_Wellness.Models.Service>? services;
     private Dictionary<int, List<Family_and_Spa_Wellness.Models.ServicePricingTier>> tiersByService = new();
+    private List<string> categories = [];
+    private string selectedCategory = "";
+    private string sortOrder = "name";
 
     protected override async Task OnInitializedAsync()
     {
         services = await Db.Services.Where(s => s.IsActive).ToListAsync();
         var tiers = await Db.Set<Family_and_Spa_Wellness.Models.ServicePricingTier>().Where(t => t.IsActive && t.ProviderId == null).ToListAsync();
         tiersByService = tiers.GroupBy(t => t.ServiceId).ToDictionary(g => g.Key, g => g.ToList());
+        categories = services.Select(s => s.Category).Distinct().OrderBy(c => c).ToList();
+    }
+
+    // US-701: browse services filtered by category and sorted by price
+    private IEnumerable<Family_and_Spa_Wellness.Models.Service> FilteredServices()
+    {
+        var filtered = services!.AsEnumerable();
+        if (!string.IsNullOrEmpty(selectedCategory))
+        {
+            filtered = filtered.Where(s => s.Category == selectedCategory);
+        }
+
+        return sortOrder switch
+        {
+            "price-asc" => filtered.OrderBy(s => s.Price),
+            "price-desc" => filtered.OrderByDescending(s => s.Price),
+            _ => filtered.OrderBy(s => s.Name),
+        };
     }
 }
