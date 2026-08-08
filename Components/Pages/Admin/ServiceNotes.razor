@@ -85,7 +85,7 @@ else
     <h3 class="h6 mt-4">Schedule a Follow-up</h3>
     @if (followUpBooked)
     {
-        <p class="text-sage">Follow-up scheduled for @followUpDate.ToString("MMM d, yyyy") at @FormatHour(followUpHour).</p>
+        <p class="text-sage">Follow-up scheduled for @confirmedFollowUpDate.ToString("MMM d, yyyy") at @FormatHour(confirmedFollowUpHour).</p>
     }
     <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
         <select class="form-select w-auto" @bind="followUpServiceId">
@@ -125,6 +125,8 @@ else
     private DateTime followUpDate = DateTime.Today.AddDays(7);
     private int followUpHour;
     private bool followUpBooked;
+    private DateTime confirmedFollowUpDate;
+    private int confirmedFollowUpHour;
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -210,6 +212,8 @@ else
         });
         await Db.SaveChangesAsync();
 
+        confirmedFollowUpDate = followUpDate;
+        confirmedFollowUpHour = followUpHour;
         followUpBooked = true;
         followUpServiceId = 0;
         followUpHour = 0;
