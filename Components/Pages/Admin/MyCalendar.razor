@@ -35,6 +35,11 @@ else
                     <div class="flex-grow-1">
                         <div class="fw-semibold">@row.Client?.FullName</div>
                         <div class="text-sage small">@row.Service?.Name — @row.Client?.Phone</div>
+                        @if (missingWaiverAppointmentIds.Contains(row.Appointment.Id))
+                        {
+                            <!-- US-405: alert if a client hasn't completed a required waiver -->
+                            <span class="badge-featured mt-1 d-inline-block">⚠ Waiver not on file</span>
+                        }
                     </div>
                     <div class="d-flex gap-2">
                         <button class="btn btn-sm btn-outline-primary" @onclick="() => CompleteAppointment(row.Appointment)">Complete</button>
@@ -68,6 +73,7 @@ else
     private List<BookingRow> upcomingAppointments = [];
     private HashSet<int> bookedHoursToday = [];
     private HashSet<int> unavailableHoursToday = [];
+    private HashSet<int> missingWaiverAppointmentIds = [];
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -105,6 +111,8 @@ else
             .Select(a => new BookingRow(a, users.GetValueOrDefault(a.ClientId), services.GetValueOrDefault(a.ServiceId)))
             .ToList();
 
+        await LoadMissingWaiversAsync();
+
         bookedHoursToday = appointments
             .Where(a => a.StartTime.Date == DateTime.Today)
             .Select(a => a.StartTime.Hour)
@@ -114,6 +122,32 @@ else
             .Where(a => a.ProviderId == provider!.Id && a.Date == DateTime.Today && !a.IsAvailable)
             .Select(a => a.Hour)
             .ToListAsync())
+            .ToHashSet();
+    }
+
+    // US-405: flag appointments whose service requires a waiver type the client hasn't signed
+    private async Task LoadMissingWaiversAsync()
+    {
+        var requiredByAppointment = upcomingAppointments
+            .Where(r => r.Client is not null && !string.IsNullOrEmpty(r.Service?.RequiresWaiverType))
+            .ToList();
+
+        if (requiredByAppointment.Count == 0)
+        {
+            missingWaiverAppointmentIds = [];
+            return;
+        }
+
+        var clientIds = requiredByAppointment.Select(r => r.Client!.Id).ToHashSet();
+        var signedWaivers = await Db.Waivers
+            .Where(w => w.IsSigned && clientIds.Contains(w.ClientId))
+            .Select(w => new { w.ClientId, w.WaiverType })
+            .ToListAsync();
+        var signedSet = signedWaivers.Select(w => (w.ClientId, w.WaiverType)).ToHashSet();
+
+        missingWaiverAppointmentIds = requiredByAppointment
+            .Where(r => !signedSet.Contains((r.Client!.Id, r.Service!.RequiresWaiverType!)))
+            .Select(r => r.Appointment.Id)
             .ToHashSet();
     }
 

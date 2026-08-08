@@ -13,6 +13,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Testimonial> Testimonials => Set<Testimonial>();
     public DbSet<ProviderAvailability> ProviderAvailabilities => Set<ProviderAvailability>();
     public DbSet<Staff> Staff => Set<Staff>();
+    public DbSet<Waiver> Waivers => Set<Waiver>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +55,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             .HasOne<User>()
             .WithMany()
             .HasForeignKey(a => a.ProviderId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Waiver>()
+            .HasOne<User>()
+            .WithMany()
+            .HasForeignKey(w => w.ClientId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // Use fixed, deterministic CreatedAt values to avoid EF Core "pending model changes" caused by
