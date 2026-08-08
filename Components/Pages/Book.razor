@@ -48,7 +48,7 @@ else
         <h2 class="h5">Choose a Provider, Date &amp; Time</h2>
         <div class="mb-3">
             <label class="form-label">Provider</label>
-            <select class="form-select w-auto" @bind="selectedProviderId">
+            <select class="form-select w-auto" @bind="selectedProviderId" @bind:after="RefreshAvailabilityAsync">
                 <option value="0">Any available provider</option>
                 @foreach (var provider in providers)
                 {
@@ -58,13 +58,21 @@ else
         </div>
         <div class="mb-3">
             <label class="form-label">Date</label>
-            <input type="date" class="form-control w-auto" @bind="selectedDate" @bind:format="yyyy-MM-dd" />
+            <input type="date" class="form-control w-auto" @bind="selectedDate" @bind:format="yyyy-MM-dd" @bind:after="RefreshAvailabilityAsync" />
         </div>
+        <!-- US-702: real-time availability for a specific provider -->
         <div class="d-flex flex-wrap gap-2 mb-3">
             @foreach (var hour in AvailabilityHours)
             {
-                <button class="btn btn-sm @(selectedHour == hour ? "btn-primary" : "btn-outline-secondary")" @onclick="() => selectedHour = hour">
+                var isTaken = selectedProviderId != 0 && (bookedHours.Contains(hour) || blockedHours.Contains(hour));
+                <button class="btn btn-sm @(selectedHour == hour ? "btn-primary" : "btn-outline-secondary")"
+                        disabled="@isTaken"
+                        @onclick="() => selectedHour = hour">
                     @FormatHour(hour)
+                    @if (isTaken)
+                    {
+                        <div class="slot-state">Unavailable</div>
+                    }
                 </button>
             }
         </div>
@@ -96,6 +104,8 @@ else
     private DateTime selectedDate = DateTime.Today.AddDays(1);
     private int selectedHour;
     private bool bookingComplete;
+    private HashSet<int> bookedHours = [];
+    private HashSet<int> blockedHours = [];
 
     private static readonly int[] AvailabilityHours = [9, 10, 11, 12, 13, 14, 15, 16, 17];
 
@@ -113,10 +123,38 @@ else
     }
 
     // US-703: move to the provider/date/time step once a service is chosen
-    private void SelectService(Service service)
+    private async Task SelectService(Service service)
     {
         selectedService = service;
         currentStep = 2;
+        await RefreshAvailabilityAsync();
+    }
+
+    // US-702: recompute which hours are already booked or blocked for the selected provider/date
+    private async Task RefreshAvailabilityAsync()
+    {
+        selectedHour = 0;
+
+        if (selectedProviderId == 0)
+        {
+            bookedHours = [];
+            blockedHours = [];
+            return;
+        }
+
+        bookedHours = (await Db.Appointments
+            .Where(a => a.ProviderId == selectedProviderId
+                && a.StartTime.Date == selectedDate.Date
+                && a.Status != "Cancelled")
+            .Select(a => a.StartTime.Hour)
+            .ToListAsync())
+            .ToHashSet();
+
+        blockedHours = (await Db.ProviderAvailabilities
+            .Where(a => a.ProviderId == selectedProviderId && a.Date == selectedDate.Date && !a.IsAvailable)
+            .Select(a => a.Hour)
+            .ToListAsync())
+            .ToHashSet();
     }
 
     // US-703: create the appointment from the selections made across the wizard steps
