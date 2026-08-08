@@ -1,7 +1,118 @@
 @page "/dashboard"
 @attribute [Authorize]
+@rendermode InteractiveServer
+@using System.Security.Claims
+@using Family_and_Spa_Wellness.Data
+@using Family_and_Spa_Wellness.Models
+@using Microsoft.EntityFrameworkCore
+@inject AppDbContext Db
+@inject AuthenticationStateProvider AuthStateProvider
 
+<!-- US-707: view past appointments and treatment history -->
 <PageTitle>Dashboard - Fargo Spa and Wellness</PageTitle>
 
 <h1>Dashboard</h1>
-<p>Your upcoming appointments will appear here.</p>
+
+@if (currentUser is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <h2 class="h5">Upcoming Appointments</h2>
+    @if (upcomingAppointments.Count == 0)
+    {
+        <p class="text-sage">No upcoming appointments. <a href="/book">Book one now</a>.</p>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2 mb-4">
+            @foreach (var row in upcomingAppointments)
+            {
+                <div class="card">
+                    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                        <div class="booking-time">
+                            <div class="fw-semibold">@row.Appointment.StartTime.ToString("MMM d, h:mm tt")</div>
+                            <span class="status-badge">@row.Appointment.Status</span>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">@row.Service?.Name</div>
+                            <div class="text-sage small">with @(row.Provider?.FullName ?? "any available provider")</div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+
+    <h2 class="h5">Past Appointments</h2>
+    @if (pastAppointments.Count == 0)
+    {
+        <p class="text-sage">No past appointments yet.</p>
+    }
+    else
+    {
+        <div class="d-flex flex-column gap-2">
+            @foreach (var row in pastAppointments)
+            {
+                <div class="card">
+                    <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                        <div class="booking-time">
+                            <div class="fw-semibold">@row.Appointment.StartTime.ToString("MMM d, yyyy")</div>
+                            <span class="status-badge">@row.Appointment.Status</span>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">@row.Service?.Name</div>
+                            <div class="text-sage small">with @(row.Provider?.FullName ?? "an available provider")</div>
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private User? currentUser;
+    private List<BookingRow> upcomingAppointments = [];
+    private List<BookingRow> pastAppointments = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(ClaimTypes.Email)?.Value;
+        if (!string.IsNullOrEmpty(email))
+        {
+            currentUser = await Db.Users.FirstOrDefaultAsync(u => u.Email == email);
+        }
+
+        if (currentUser is null)
+        {
+            return;
+        }
+
+        var appointments = await Db.Appointments
+            .Where(a => a.ClientId == currentUser.Id)
+            .ToListAsync();
+
+        var services = await Db.Services.ToDictionaryAsync(s => s.Id);
+        var providers = await Db.Users.ToDictionaryAsync(u => u.Id);
+
+        var rows = appointments
+            .Select(a => new BookingRow(a, services.GetValueOrDefault(a.ServiceId), a.ProviderId.HasValue ? providers.GetValueOrDefault(a.ProviderId.Value) : null))
+            .ToList();
+
+        // US-707: split into upcoming (still actionable) vs past/treatment history, most-recent-first for history
+        upcomingAppointments = rows
+            .Where(r => r.Appointment.Status is "Upcoming" or "CheckedIn")
+            .OrderBy(r => r.Appointment.StartTime)
+            .ToList();
+
+        pastAppointments = rows
+            .Where(r => r.Appointment.Status is "Completed" or "NoShow" or "Cancelled")
+            .OrderByDescending(r => r.Appointment.StartTime)
+            .ToList();
+    }
+
+    private record BookingRow(Appointment Appointment, Service? Service, User? Provider);
+}
