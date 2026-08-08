@@ -97,14 +97,15 @@ else
         </div>
     }
 
-    <h2>My Availability</h2>
-    <p class="text-sage">Toggle time blocks to mark yourself unavailable. Booked times are shown for reference.</p>
+    <!-- US-402: block off unavailable times -->
+    <h2>My Availability — @availabilityDate.ToString("dddd, MMM d")</h2>
+    <p class="text-sage">Toggle time blocks to mark yourself unavailable on this day. Booked times are shown for reference.</p>
 
     <div class="d-flex flex-wrap gap-2 mt-3">
         @foreach (var hour in AvailabilityHours)
         {
-            var isBooked = bookedHoursToday.Contains(hour);
-            var isUnavailable = unavailableHoursToday.Contains(hour);
+            var isBooked = bookedHoursForDay.Contains(hour);
+            var isUnavailable = unavailableHoursForDay.Contains(hour);
             <button class="btn slot-btn @(isBooked ? "slot-booked" : isUnavailable ? "slot-unavailable" : "slot-available")"
                     disabled="@isBooked"
                     @onclick="() => ToggleAvailability(hour)">
@@ -118,8 +119,9 @@ else
 @code {
     private User? provider;
     private List<BookingRow> weekAppointments = [];
-    private HashSet<int> bookedHoursToday = [];
-    private HashSet<int> unavailableHoursToday = [];
+    private DateTime availabilityDate = DateTime.Today;
+    private HashSet<int> bookedHoursForDay = [];
+    private HashSet<int> unavailableHoursForDay = [];
 
     private DateTime selectedDate = DateTime.Today;
     private string viewMode = "Day";
@@ -163,14 +165,17 @@ else
             .Select(a => new BookingRow(a, users.GetValueOrDefault(a.ClientId), services.GetValueOrDefault(a.ServiceId)))
             .ToList();
 
-        var todaysAppointments = await Db.Appointments
-            .Where(a => a.ProviderId == provider!.Id && a.StartTime.Date == DateTime.Today)
-            .Select(a => a.StartTime.Hour)
-            .ToListAsync();
-        bookedHoursToday = todaysAppointments.ToHashSet();
+        // US-402: availability grid tracks whichever day is currently selected, not just today
+        availabilityDate = selectedDate;
 
-        unavailableHoursToday = (await Db.ProviderAvailabilities
-            .Where(a => a.ProviderId == provider!.Id && a.Date == DateTime.Today && !a.IsAvailable)
+        bookedHoursForDay = (await Db.Appointments
+            .Where(a => a.ProviderId == provider!.Id && a.StartTime.Date == availabilityDate)
+            .Select(a => a.StartTime.Hour)
+            .ToListAsync())
+            .ToHashSet();
+
+        unavailableHoursForDay = (await Db.ProviderAvailabilities
+            .Where(a => a.ProviderId == provider!.Id && a.Date == availabilityDate && !a.IsAvailable)
             .Select(a => a.Hour)
             .ToListAsync())
             .ToHashSet();
@@ -215,10 +220,11 @@ else
         await LoadAsync();
     }
 
+    // US-402: block off (or re-open) a specific hour on the currently selected day
     private async Task ToggleAvailability(int hour)
     {
         var existing = await Db.ProviderAvailabilities
-            .FirstOrDefaultAsync(a => a.ProviderId == provider!.Id && a.Date == DateTime.Today && a.Hour == hour);
+            .FirstOrDefaultAsync(a => a.ProviderId == provider!.Id && a.Date == availabilityDate && a.Hour == hour);
 
         if (existing is not null)
         {
@@ -229,7 +235,7 @@ else
             Db.ProviderAvailabilities.Add(new ProviderAvailability
             {
                 ProviderId = provider!.Id,
-                Date = DateTime.Today,
+                Date = availabilityDate,
                 Hour = hour,
                 IsAvailable = false,
             });
